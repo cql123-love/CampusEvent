@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ stats.activity.title }}{% endblock %}
+{% block heading %}{{ stats.activity.title }}{% endblock %}
+{% block sub %}{{ stats.activity.category }} · {{ stats.activity.policy_type }}{% endblock %}
+
+{% block content %}
+<div class="detail-grid">
+  <div class="panel">
+    <h3>活动信息</h3>
+    <dl class="kv">
+      <dt>活动名称</dt><dd>{{ stats.activity.title }}</dd>
+      <dt>活动类型</dt><dd><span class="tag tag-category">{{ stats.activity.category }}</span></dd>
+      <dt>开始时间</dt><dd>{{ stats.activity.start_at }}</dd>
+      <dt>活动地点</dt><dd>{{ stats.activity.location }}</dd>
+      <dt>人数上限</dt><dd>{{ stats.capacity }} 人</dd>
+      <dt>报名方式</dt>
+      <dd>
+        {% if stats.activity.policy_type == '直接报名' %}
+          <span class="tag tag-direct">直接报名</span>　名额充足即自动通过
+        {% else %}
+          <span class="tag tag-review">审核型</span>　提交后需管理员审核
+        {% endif %}
+      </dd>
+    </dl>
+
+    {% set mine = my_registrations|selectattr('is_effective')|list %}
+    <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">
+      {% if mine %}
+        <p style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;">
+          你已报名，当前状态：<b>{{ mine[0].status }}</b>
+        </p>
+        {% if mine[0].is_cancellable() %}
+        <form method="post" action="{{ url_for('main.cancel', registration_id=mine[0].registration_id) }}"
+              onsubmit="return confirm('确定取消该报名吗？');">
+          <input type="hidden" name="student_id" value="{{ student_id }}">
+          <button type="submit" class="btn btn-danger">取消报名</button>
+        </form>
+        {% endif %}
+      {% else %}
+        {% if stats.activity.is_started() %}
+          <p class="note">该活动已开始，报名通道已关闭。</p>
+        {% elif stats.remaining <= 0 %}
+          <p class="note">名额已满，暂时无法报名。</p>
+        {% else %}
+          <form method="post" action="{{ url_for('main.register', activity_id=stats.activity.activity_id) }}">
+            <input type="hidden" name="student_id" value="{{ student_id }}">
+            <button type="submit" class="btn btn-primary">立即报名</button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h3>报名统计</h3>
+      <div class="stat-row" style="margin:0;padding:0;border:none;background:none;flex-wrap:wrap;gap:18px;">
+        <div><span class="n">{{ stats.approved }}</span><span class="l">已通过</span></div>
+        <div><span class="n">{{ stats.pending }}</span><span class="l">待审核</span></div>
+        <div><span class="n">{{ stats.remaining }}</span><span class="l">剩余名额</span></div>
+      </div>
+      <p class="note">
+        名额仅按「已通过」计算，待审核暂不占用（业务规则 3）。
+        {% if stats.activity.policy_type == '审核型' %}
+        审核型活动：批准时系统会再次检查名额。
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <h3>报名记录</h3>
+      {% if registrations %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>学生</th><th>状态</th><th>时间</th></tr></thead>
+          <tbody>
+          {% for r in registrations %}
+            <tr>
+              <td>{{ r.student_id }}</td>
+              <td><span class="tag tag-{{ 'approved' if r.status=='已通过' else ('pending' if r.status=='待审核' else ('rejected' if r.status=='已拒绝' else 'cancelled')) }}">{{ r.status }}</span></td>
+              <td style="color:var(--ink-3);font-size:12.5px;">{{ r.created_at }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p style="color:var(--ink-3);font-size:13px;">暂无报名记录</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

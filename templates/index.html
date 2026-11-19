@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}活动广场{% endblock %}
+{% block heading %}活动广场{% endblock %}
+{% block sub %}浏览校园活动，报名并跟踪审核结果{% endblock %}
+{% block topbar_extra %}
+<form method="get" class="filter-bar" style="margin:0;border:none;padding:0;background:none;">
+  <select name="student" onchange="this.form.submit()" style="width:auto;min-width:132px;">
+    {% for s in students %}
+      {% if s.student_id == student_id %}
+        <option value="{{ s.student_id }}" selected>{{ s.name }}（{{ s.student_id }}）</option>
+      {% else %}
+        <option value="{{ s.student_id }}">{{ s.name }}（{{ s.student_id }}）</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+  <span style="font-size:12.5px;color:var(--ink-3);">当前身份（演示账号切换）</span>
+</form>
+{% endblock %}
+
+{% block content %}
+<form method="get" class="filter-bar">
+  <input type="text" name="keyword" value="{{ keyword }}" placeholder="按活动名称筛选">
+  <input type="hidden" name="student" value="{{ student_id }}">
+  <button type="submit" class="btn btn-primary">筛选</button>
+  {% if keyword %}
+    <a class="btn" href="{{ url_for('main.index', student=student_id) }}">清除</a>
+  {% endif %}
+  <span style="margin-left:auto;font-size:12.5px;color:var(--ink-3);">共 {{ items|length }} 个活动</span>
+</form>
+
+{% if items %}
+<div class="grid">
+  {% for it in items %}
+  {% set a = it.activity %}
+  <div class="card">
+    <div class="card-head">
+      <h3>{{ a.title }}</h3>
+      <span class="tag {{ 'tag-direct' if a.policy_type == '直接报名' else 'tag-review' }}">
+        {{ a.policy_type }}
+      </span>
+    </div>
+
+    <div class="card-meta">
+      <div><span class="k">类型</span><span>{{ a.category }}</span></div>
+      <div><span class="k">时间</span><span>{{ a.start_at }}</span></div>
+      <div><span class="k">地点</span><span>{{ a.location }}</span></div>
+    </div>
+
+    <div class="card-foot">
+      <div class="quota">
+        剩余 <b>{{ it.stats.remaining }}</b> / {{ it.stats.capacity }}
+        {% if it.my_registration %}
+          <span class="tag tag-{{ 'approved' if it.my_registration.status=='已通过' else ('pending' if it.my_registration.status=='待审核' else ('rejected' if it.my_registration.status=='已拒绝' else 'cancelled')) }}" style="margin-left:6px;">{{ it.my_registration.status }}</span>
+        {% endif %}
+      </div>
+      <a class="btn btn-sm" href="{{ url_for('main.activity_detail', activity_id=a.activity_id, student=student_id) }}">详情</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <span class="ic">▤</span>
+  暂无符合条件的活动{% if keyword %}（关键字「{{ keyword }}」）{% endif %}
+</div>
+{% endif %}
+{% endblock %}

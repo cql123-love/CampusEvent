@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}CampusEvent{% endblock %} · 校园活动报名与管理系统</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="rail">
+    <div class="rail-brand">
+      <span class="mark">CE</span>
+      <h1>CampusEvent</h1>
+      <p>校园活动报名与管理</p>
+    </div>
+    <nav>
+      <a href="{{ url_for('main.index') }}" class="{{ 'active' if request.endpoint == 'main.index' }}">
+        <span class="ic">▤</span>活动广场
+      </a>
+      <a href="{{ url_for('main.messages') }}" class="{{ 'active' if request.endpoint == 'main.messages' }}">
+        <span class="ic">✉</span>我的消息
+      </a>
+      <a href="{{ url_for('main.admin_home') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('main.admin') }}">
+        <span class="ic">⚙</span>管理后台
+      </a>
+    </nav>
+    <div class="rail-foot">
+      《软件工程》实验二<br>
+      CampusEvent<br>
+      计科1班 · 242806010126 · 陈倩林
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h2>{% block heading %}活动广场{% endblock %}</h2>
+        <div class="sub">{% block sub %}{% endblock %}</div>
+      </div>
+      <div>{% block topbar_extra %}{% endblock %}</div>
+    </header>
+
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flashes">
+            {% for category, m in messages %}
+              <div class="flash {{ 'ok' if category == 'ok' else 'err' }}">{{ m }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</body>
+</html>

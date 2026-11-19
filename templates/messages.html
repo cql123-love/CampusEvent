@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}我的消息{% endblock %}
+{% block heading %}我的消息{% endblock %}
+{% block sub %}报名与审核结果会实时通知到这里{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:760px;">
+  {% if messages %}
+    {% for m in messages %}
+    <div style="padding:14px 0;border-bottom:1px solid var(--line-2);display:flex;gap:14px;align-items:flex-start;">
+      <div style="flex:1;">
+        <div style="font-size:14px;color:var(--ink);margin-bottom:4px;">
+          {{ m.content }}
+          {% if not m.is_read %}
+            <span class="tag tag-pending" style="margin-left:6px;">未读</span>
+          {% endif %}
+        </div>
+        <div style="font-size:12px;color:var(--ink-3);">
+          {{ m.created_at }} · 活动 {{ m.activity_id }}
+        </div>
+      </div>
+      {% if not m.is_read %}
+      <form method="post" action="{{ url_for('main.read_message', message_id=m.message_id) }}">
+        <input type="hidden" name="student" value="{{ student_id }}">
+        <button type="submit" class="btn btn-sm">标为已读</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty" style="border:none;padding:36px 20px;">
+      <span class="ic">✉</span>
+      暂无消息。报名活动或被管理员审批后，通知会出现在这里。
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

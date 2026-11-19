@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑活动' if activity else '新建活动' }}{% endblock %}
+{% block heading %}{{ '编辑活动' if activity else '新建活动' }}{% endblock %}
+{% block sub %}{{ '修改活动信息与报名方式' if activity else '填写活动信息并选择报名方式' }}{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:620px;">
+  <form method="post">
+    <div class="field">
+      <label>活动名称 <span class="hint">必填</span></label>
+      <input type="text" name="title" maxlength="100"
+             value="{{ activity.title if activity else '' }}" placeholder="如：Python 全栈开发工作坊">
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label>活动类型</label>
+        <input type="text" name="category" maxlength="30"
+               value="{{ activity.category if activity else '' }}" placeholder="技术讲座 / 文艺比赛 …">
+      </div>
+      <div class="field">
+        <label>活动地点</label>
+        <input type="text" name="location" maxlength="60"
+               value="{{ activity.location if activity else '' }}" placeholder="实验楼 B301">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label>开始时间 <span class="hint">必填</span></label>
+        <input type="datetime-local" name="start_at"
+               value="{{ activity.start_at[:16].replace(' ', 'T') if activity else '' }}">
+      </div>
+      <div class="field">
+        <label>人数上限 <span class="hint">正整数</span></label>
+        <input type="number" name="capacity" min="1" step="1"
+               value="{{ activity.capacity if activity else '' }}" placeholder="如：30">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>报名方式</label>
+      <select name="policy_type">
+        {% for p in policy_types %}
+          <option value="{{ p }}" {% if activity and activity.policy_type == p %}selected{% elif not activity and p == '直接报名' %}selected{% endif %}>
+            {{ p }}{% if p == '直接报名' %}（名额充足即自动通过）{% else %}（提交后需管理员审核）{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <p class="hint" style="margin-top:6px;font-size:12px;color:var(--ink-3);">
+        报名方式对应策略模式中的实现类，变更活动类型不会影响报名流程代码。
+      </p>
+    </div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line-2);display:flex;gap:10px;">
+      <button type="submit" class="btn btn-primary">保存</button>
+      <a class="btn" href="{{ url_for('main.admin_home') }}">取消</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
