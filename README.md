@@ -12,7 +12,16 @@
 
 ---
 
-## 一、项目定位
+## 一、在线地址
+
+| 项目 | 地址 |
+|---|---|
+| **代码仓库** | **https://github.com/cql123-love/CampusEvent** |
+| **项目 Web 地址（公网可访问）** | **待部署后回填** |
+
+---
+
+## 二、项目定位
 
 面向校园管理员与学生的活动报名系统：管理员发布活动，学生浏览并报名，报名结果通过站内消息通知。
 
@@ -24,7 +33,7 @@
 
 ---
 
-## 二、目录结构
+## 三、目录结构
 
 ```
 CampusEvent/
@@ -60,14 +69,14 @@ CampusEvent/
 
 ---
 
-## 三、快速开始（从零运行）
+## 四、部署和运行说明
 
-### 3.1 环境要求
+### 4.1 环境要求
 
 - Python 3.11 或更高版本
 - 操作系统：Windows / macOS / Linux 均可
 
-### 3.2 本地运行
+### 4.2 本地运行
 
 ```bash
 # 1. 克隆仓库
@@ -88,26 +97,39 @@ python app.py
 
 浏览器打开 <http://127.0.0.1:5000> 即可看到活动广场。
 
-### 3.3 运行测试
+### 4.3 运行测试
 
 ```bash
 pytest tests/ -v          # 22 条验收与边界用例
 python tests/e2e_check.py # 12 项 Web 层端到端验证
 ```
 
-### 3.4 生产部署（云服务器）
+### 4.4 云端部署（当前线上地址）
+
+**线上地址：** `https://studytask-production-44f96ffe.up.railway.app` ← 部署后回填实际地址
 
 仓库内已提供 `railway.json`，Render 亦可（`render.yaml`）：
 
-- Build：`pip install -r requirements.txt`
-- Start：`gunicorn app:app --bind 0.0.0.0:$PORT`
-- 环境变量：`CAMPUSEVENT_DB=/tmp/campusevent.db`（可选）
+| 配置项 | 值 |
+|---|---|
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn app:app --bind 0.0.0.0:$PORT` |
+| Healthcheck Path | `/` |
+| 环境变量 | `CAMPUSEVENT_DB=/tmp/campusevent.db`（可选） |
+| 部署平台 | Railway Free 计划（$0/月，**无需信用卡**） |
+
+**复现部署步骤：**
+
+1. 打开 <https://railway.com/new> → 用 GitHub 登录 → 选择 **GitHub Repository**
+2. 首次需点 **Configure GitHub App** 授权（Repository access 选 *Only select repositories* 并勾选 `CampusEvent`），授权后点 **Refresh**
+3. 选择 `cql123-love/CampusEvent`，Railway 会自动读取 `railway.json` 完成构建
+4. 构建完成后自动分配固定域名；或在 Service 的 **Settings → Networking** 点 **Generate Domain**
 
 > 云端实例磁盘为临时盘，重新部署后数据会重置；系统检测到云端环境时会自动写入演示数据（5 个活动 + 4 个学生 + 若干报名与消息），便于直接查看界面效果。
 
 ---
 
-## 四、演示账号
+## 五、演示账号
 
 指导书允许使用固定演示账号，无需注册体系。系统内置：
 
@@ -123,7 +145,7 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 
 ---
 
-## 五、核心业务规则实现对照（附录 B.2）
+## 六、核心业务规则实现对照（附录 B.2）
 
 | 规则 | 实现位置 | 测试用例 |
 |---|---|---|
@@ -137,7 +159,7 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 
 ---
 
-## 六、Git 版本标签（指导书 3.6 要求）
+## 七、Git 版本标签（指导书 3.6 要求）
 
 | 标签 | 含义 | 说明 |
 |---|---|---|
@@ -148,7 +170,7 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 
 ---
 
-## 七、文档索引
+## 八、文档索引
 
 | 文档 | 内容 |
 |---|---|
