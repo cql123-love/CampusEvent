@@ -1,0 +1,162 @@
+@startuml CampusEvent_Seq_审批
+' ============================================================
+' 时序图 2：管理员审批（通过 / 拒绝 / 容量已满）
+' 《软件工程》实验二 | 陈倩林 计科1班 242806010126
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ParticipantBorderColor #444444
+skinparam ParticipantBackgroundColor #F1EFE8
+skinparam LifeLineBorderColor #888780
+skinparam LifeLineBackgroundColor #FFFFFF
+skinparam ArrowColor #444444
+
+actor Admin as A
+participant "Route\n(表现层)" as R
+participant "RegistrationService\n(应用层)" as SVC
+participant "RegistrationPolicy\n(抽象)" as POL
+participant "ReviewPolicy" as RP
+participant "RegistrationRepository" as RR
+database "SQLite" as DB
+participant "EventPublisher\n(Subject)" as PUB
+participant "MessageNotifier\n(Observer)" as NOT
+participant "MessageRepository" as MR
+database "SQLite\n(messages)" as MDB
+
+== 场景一：管理员批准待审核报名 ==
+A -> R : POST /admin/registrations/{id}/review\n{approved: true}
+R -> SVC : review(registration_id, approved=True)
+activate SVC
+
+SVC -> RR : get(registration_id)
+RR -> DB : SELECT * FROM registrations
+DB --> RR : registration{status="待审核"}
+RR --> SVC : Registration
+
+SVC -> RR : count_approved(activity_id)
+RR -> DB : SELECT COUNT(*) WHERE status='已通过'
+DB --> RR : approved_count
+RR --> SVC : approved_count
+
+SVC -> SVC : _check_quota()\n★ 批准时**再次检查名额**
+note right of SVC
+  业务规则 2：批准时再次检查剩余名额
+  业务规则 3：满员后不得再批准新报名
+  待审核报名暂不占用名额
+end note
+
+SVC -> POL : policy.review(activity, registration, approved=True)
+activate POL
+POL -> RP : （运行时注入 ReviewPolicy）
+activate RP
+RP --> POL : "已通过"
+deactivate RP
+POL --> SVC : "已通过"
+deactivate POL
+
+SVC -> RR : update(Registration{status="已通过"})
+activate RR
+RR -> DB : BEGIN / UPDATE / COMMIT
+DB --> RR : ok
+deactivate RR
+
+SVC -> PUB : publish(RegistrationEvent{已通过})
+activate PUB
+PUB -> NOT : update(event)
+activate NOT
+NOT -> MR : exists_once(registration_id, "已通过")
+MR -> MDB : SELECT ... → False
+MR --> NOT : False
+NOT -> MR : insert(Message)
+MR -> MDB : INSERT
+deactivate NOT
+deactivate PUB
+
+SVC --> R : Registration{status="已通过"}
+deactivate SVC
+R --> A : 302 + 提示"已批准"
+
+== 场景二：管理员拒绝待审核报名 ==
+A -> R : POST /admin/registrations/{id}/review\n{approved: false}
+R -> SVC : review(registration_id, approved=False)
+activate SVC
+SVC -> RR : get(registration_id)
+RR -> DB : SELECT ...
+DB --> RR : registration{status="待审核"}
+RR --> SVC : Registration
+note right of SVC
+  拒绝不需要检查名额
+  名额只对"已通过"生效
+end note
+SVC -> POL : policy.review(activity, registration, approved=False)
+activate POL
+POL -> RP : review(...)
+activate RP
+RP --> POL : "已拒绝"
+deactivate RP
+POL --> SVC : "已拒绝"
+deactivate POL
+SVC -> RR : update(Registration{status="已拒绝"})
+RR -> DB : BEGIN / UPDATE / COMMIT
+DB --> RR : ok
+RR --> SVC : ok
+SVC -> PUB : publish(RegistrationEvent{已拒绝})
+PUB -> NOT : update(event)
+NOT -> MR : insert(Message)
+MR -> MDB : INSERT
+deactivate SVC
+R --> A : 302 + 提示"已拒绝"
+
+== 场景三：批准时容量已满 → 批准失败（关键边界）==
+A -> R : POST /admin/registrations/{id}/review\n{approved: true}
+R -> SVC : review(registration_id, approved=True)
+activate SVC
+SVC -> RR : get(registration_id)
+RR -> DB : SELECT ...
+DB --> RR : registration{status="待审核"}
+RR --> SVC : Registration
+SVC -> RR : count_approved(activity_id)
+RR -> DB : SELECT COUNT(*) WHERE status='已通过'
+DB --> RR : approved_count == capacity
+RR --> SVC : 已满
+SVC --> R : 抛出 BusinessError("名额已满，无法批准")
+note right of SVC
+  ★ 状态**不变**
+  报名记录仍为"待审核"
+  不会超出人数上限
+  且不会发出"已通过"通知
+end note
+deactivate SVC
+R --> A : 提示"名额已满，无法批准"
+
+== 场景四：学生取消自己的报名 ==
+actor Student as S
+S -> R : POST /registrations/{id}/cancel
+R -> SVC : cancel(registration_id, student_id)
+activate SVC
+SVC -> RR : get(registration_id)
+RR -> DB : SELECT ...
+DB --> RR : registration{status="待审核" 或 "已通过"}
+RR --> SVC : Registration
+SVC -> SVC : 校验归属：registration.student_id == student_id
+SVC -> SVC : 校验状态可取消\n（待审核 / 已通过 可取消）
+SVC -> RR : update(Registration{status="已取消"})
+RR -> DB : BEGIN / UPDATE / COMMIT
+DB --> RR : ok
+RR --> SVC : ok
+SVC -> PUB : publish(RegistrationEvent{已取消})
+PUB -> NOT : update(event)
+NOT -> MR : insert(Message)
+MR -> MDB : INSERT
+deactivate SVC
+R --> S : 302 + 提示"已取消"
+
+note over SVC, MR
+  取消后统计同步变化：
+  已通过数减少 → 剩余名额增加
+  （由 statistics() 实时统计，无需额外维护）
+end note
+
+@enduml

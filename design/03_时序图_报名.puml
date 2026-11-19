@@ -1,0 +1,144 @@
+@startuml CampusEvent_Seq_报名
+' ============================================================
+' 时序图 1：学生报名（直接报名 + 审核型报名）
+' 《软件工程》实验二 | 陈倩林 计科1班 242806010126
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ParticipantBorderColor #444444
+skinparam ParticipantBackgroundColor #F1EFE8
+skinparam LifeLineBorderColor #888780
+skinparam LifeLineBackgroundColor #FFFFFF
+skinparam ArrowColor #444444
+
+actor Student as S
+participant "Route\n(表现层)" as R
+participant "RegistrationService\n(应用层)" as SVC
+participant "RegistrationPolicy\n(抽象)" as POL
+participant "DirectPolicy" as DP
+participant "ReviewPolicy" as RP
+participant "RegistrationRepository" as RR
+database "SQLite" as DB
+participant "EventPublisher\n(Subject)" as PUB
+participant "MessageNotifier\n(Observer)" as NOT
+participant "MessageRepository" as MR
+database "SQLite\n(messages)" as MDB
+
+== 场景一：直接报名活动（容量充足）==
+S -> R : POST /register\n{activity_id, student_id}
+R -> SVC : submit(activity_id, student_id)
+
+activate SVC
+SVC -> RR : get(activity_id)
+RR -> DB : SELECT * FROM activities
+DB --> RR : activity
+RR --> SVC : Activity
+
+SVC -> SVC : _check_common_rules()\n活动存在 / 未开始 / 无重复有效报名
+SVC -> RR : count_approved(activity_id)
+RR -> DB : SELECT COUNT(*) WHERE status='已通过'
+DB --> RR : approved_count
+RR --> SVC : approved_count
+
+SVC -> SVC : _check_quota()\n公共规则：剩余名额 > 0
+note right of SVC
+  名额检查是**公共规则**
+  两种活动类型都适用
+  因此放在服务层而非策略内
+end note
+
+SVC -> SVC : _create_policy(activity.policy_type)
+SVC -> POL : <color:#185FA5>依赖抽象</color>\npolicy.submit(activity, student)
+activate POL
+POL -> DP : （运行时注入 DirectPolicy）
+activate DP
+DP --> POL : "已通过"
+deactivate DP
+POL --> SVC : "已通过"
+deactivate POL
+
+SVC -> RR : insert(Registration{status="已通过"})
+activate RR
+RR -> DB : BEGIN / INSERT / COMMIT
+DB --> RR : ok
+deactivate RR
+note right of SVC
+  ★ 报名事务在此提交
+  记录已持久化，不可丢失
+end note
+
+SVC -> PUB : publish(RegistrationEvent{已通过})
+activate PUB
+PUB -> NOT : update(event)
+activate NOT
+NOT -> MR : exists_once(registration_id, event_type)
+MR -> MDB : SELECT ...
+MDB --> MR : False
+MR --> NOT : False
+NOT -> MR : insert(Message)
+MR -> MDB : INSERT (幂等键唯一索引)
+MDB --> MR : ok
+deactivate NOT
+deactivate PUB
+note right of NOT
+  通知在**事务外**执行
+  失败仅记入通知日志
+  不影响已提交的报名
+end note
+
+SVC --> R : Registration{status="已通过"}
+deactivate SVC
+R --> S : 302 重定向 + 提示"报名成功"
+
+== 场景二：审核型活动 ==
+S -> R : POST /register\n{activity_id, student_id}
+R -> SVC : submit(activity_id, student_id)
+activate SVC
+SVC -> SVC : _check_common_rules() / _check_quota()
+SVC -> POL : policy.submit(activity, student)
+activate POL
+POL -> RP : （运行时注入 ReviewPolicy）
+activate RP
+RP --> POL : "待审核"
+deactivate RP
+POL --> SVC : "待审核"
+deactivate POL
+SVC -> RR : insert(Registration{status="待审核"})
+RR -> DB : BEGIN / INSERT / COMMIT
+DB --> RR : ok
+RR --> SVC : ok
+SVC -> PUB : publish(RegistrationEvent{待审核})
+PUB -> NOT : update(event)
+NOT -> MR : insert(Message)
+MR -> MDB : INSERT
+deactivate SVC
+R --> S : 302 + 提示"报名已提交，等待审核"
+
+== 场景三：重复有效报名被拒绝 ==
+S -> R : POST /register（同一活动重复提交）
+R -> SVC : submit(activity_id, student_id)
+activate SVC
+SVC -> RR : has_effective(activity_id, student_id)
+RR -> DB : SELECT ... WHERE status IN ('待审核','已通过')
+DB --> RR : True
+RR --> SVC : True
+SVC --> R : 抛出 BusinessError("不可重复报名")
+deactivate SVC
+R --> S : 提示"不可重复报名"
+
+== 场景四：名额已满被拒绝 ==
+S -> R : POST /register
+R -> SVC : submit(activity_id, student_id)
+activate SVC
+SVC -> SVC : _check_common_rules() 通过
+SVC -> RR : count_approved(activity_id)
+RR -> DB : SELECT COUNT(*)
+DB --> RR : approved_count == capacity
+RR --> SVC : 已满
+SVC --> R : 抛出 BusinessError("名额已满")
+deactivate SVC
+R --> S : 提示"名额已满"
+
+@enduml

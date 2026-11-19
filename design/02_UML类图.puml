@@ -1,0 +1,242 @@
+@startuml CampusEvent_ClassDiagram
+' ============================================================
+' CampusEvent 校园活动报名与管理系统 —— UML 类图
+' 项目代号 CampusEvent | 《软件工程》实验二
+' 作者：陈倩林  计科1班  242806010126
+' 说明：依赖一律指向抽象；策略模式隔离报名规则变化；
+'       观察者模式解耦报名业务与站内通知。
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontName "Microsoft YaHei"
+
+hide circle
+hide empty members
+
+' ---------------- 实体层 ----------------
+package "实体层（领域对象 / 持久化）" {
+
+  class Student <<Entity>> {
+    + student_id : str
+    + name : str
+    --
+    + to_dict() : dict
+  }
+
+  class Activity <<Entity>> {
+    + activity_id : str
+    + title : str
+    + category : str
+    + start_at : datetime
+    + location : str
+    + capacity : int
+    + policy_type : str
+    --
+    + is_started() : bool
+    + approved_count() : int
+    + remaining_quota() : int
+    + to_dict() : dict
+  }
+
+  class Registration <<Entity>> {
+    + registration_id : str
+    + activity_id : str
+    + student_id : str
+    + status : str
+    + created_at : datetime
+    + updated_at : datetime
+    --
+    + is_effective() : bool
+    + to_dict() : dict
+  }
+
+  class Message <<Entity>> {
+    + message_id : str
+    + student_id : str
+    + activity_id : str
+    + content : str
+    + created_at : datetime
+    + is_read : bool
+  }
+}
+
+' ---------------- 策略层（策略模式） ----------------
+package "策略层（报名规则 —— 变化的轴）" {
+
+  abstract class RegistrationPolicy <<interface>> {
+    + submit(activity, student) : str
+    + review(activity, registration, approved) : str
+    + requires_quota() : bool
+    + name() : str
+  }
+
+  class DirectPolicy <<DirectPolicy>> {
+    + submit(activity, student) : str
+    + review(activity, registration, approved) : str
+    + requires_quota() : bool
+    + name() : str
+  }
+
+  class ReviewPolicy <<ReviewPolicy>> {
+    + submit(activity, student) : str
+    + review(activity, registration, approved) : str
+    + requires_quota() : bool
+    + name() : str
+  }
+}
+
+' ---------------- 事件与通知（观察者模式） ----------------
+package "事件与通知层（观察者模式）" {
+
+  class RegistrationEvent <<Event>> {
+    + event_type : str
+    + student_id : str
+    + activity_id : str
+    + registration_id : str
+    + content : str
+    + created_at : datetime
+  }
+
+  interface Observer <<interface>> {
+    + update(event : RegistrationEvent) : None
+  }
+
+  class EventPublisher <<Subject>> {
+    - _observers : list
+    + subscribe(observer) : None
+    + publish(event) : None
+  }
+
+  class MessageNotifier <<Observer>> {
+    - _repo : MessageRepository
+    + update(event) : None
+    + _write_message(event) : None
+  }
+}
+
+' ---------------- 应用层 ----------------
+package "应用层（业务编排）" {
+
+  class RegistrationService <<Service>> {
+    - activity_repo : ActivityRepository
+    - student_repo : StudentRepository
+    - registration_repo : RegistrationRepository
+    - message_repo : MessageRepository
+    - publisher : EventPublisher
+    --
+    + submit(activity_id, student_id) : Registration
+    + cancel(registration_id, student_id) : Registration
+    + review(registration_id, approved) : Registration
+    + list_messages(student_id) : list
+    + mark_message_read(message_id) : None
+    --
+    - _create_policy(policy_type) : RegistrationPolicy
+    - _check_common_rules(activity, student) : None
+    - _check_quota(activity) : None
+    - _check_duplicate(activity, student) : None
+  }
+
+  class ActivityService <<Service>> {
+    - activity_repo : ActivityRepository
+    - registration_repo : RegistrationRepository
+    --
+    + create_activity(data) : Activity
+    + update_activity(id, data) : Activity
+    + delete_activity(id) : None
+    + list_activities(keyword) : list
+    + get_activity(id) : Activity
+    + statistics(activity_id) : dict
+  }
+}
+
+' ---------------- 仓储层 ----------------
+package "仓储层（数据访问）" {
+  class BaseRepository <<abstract>> {
+    + db_path : str
+    + connect() : Connection
+    + query(sql, params) : list
+    + execute(sql, params) : None
+  }
+  class ActivityRepository <<Repository>> {
+    + insert(activity) : Activity
+    + update(activity) : Activity
+    + delete(activity_id) : None
+    + get(activity_id) : Activity
+    + list(keyword) : list
+  }
+  class StudentRepository <<Repository>> {
+    + insert(student) : Student
+    + get(student_id) : Student
+    + list() : list
+  }
+  class RegistrationRepository <<Repository>> {
+    + insert(registration) : Registration
+    + update(registration) : Registration
+    + get(registration_id) : Registration
+    + list_by_activity(activity_id) : list
+    + list_by_student(student_id) : list
+    + has_effective(activity_id, student_id) : bool
+    + count_approved(activity_id) : int
+  }
+  class MessageRepository <<Repository>> {
+    + insert(message) : None
+    + list_by_student(student_id) : list
+    + mark_read(message_id) : None
+    + exists_once(related_id, event_type) : bool
+  }
+}
+
+' ---------------- 关系：实体关联 ----------------
+Activity "1" o-- "0..*" Registration : "报名记录"
+Student  "1" o-- "0..*" Registration : "发起"
+Student  "1" o-- "0..*" Message    : "接收"
+Activity "1" o-- "0..*" Message    : "关联"
+
+' ---------------- 关系：策略实现 ----------------
+RegistrationPolicy <|.. DirectPolicy : "实现"
+RegistrationPolicy <|.. ReviewPolicy : "实现"
+
+' ---------------- 关系：观察者 ----------------
+EventPublisher o-- RegistrationEvent : "发布"
+EventPublisher o-- Observer : "订阅"
+Observer <|.. MessageNotifier : "实现"
+
+' ---------------- 关系：服务依赖（全部指向抽象） ----------------
+RegistrationService ..> RegistrationPolicy : "依赖抽象<<策略>>"
+RegistrationService ..> EventPublisher : "发布事件<<观察者>>"
+ActivityService ..> ActivityRepository : "依赖"
+
+' ---------------- 关系：仓储 ----------------
+BaseRepository <|-- ActivityRepository
+BaseRepository <|-- StudentRepository
+BaseRepository <|-- RegistrationRepository
+BaseRepository <|-- MessageRepository
+
+note right of RegistrationPolicy
+  **策略模式**
+  变化轴：报名规则
+  submit() 决定提交后的状态
+  review() 决定审批后的状态
+  配额检查不在策略内，
+  属于服务层公共规则
+end note
+
+note right of EventPublisher
+  **观察者模式**
+  变化轴：通知机制
+  报名事务提交后才 publish
+  通知失败不��响报名记录，
+  失败信息记入通知日志
+end note
+
+note bottom of RegistrationService
+  **应用层只做编排**
+  公共规则：活动已开始 /
+  重复有效报名 / 名额已满
+  策略介入点：仅决定状态
+end note
+
+@enduml
