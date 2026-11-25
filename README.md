@@ -104,35 +104,31 @@ pytest tests/ -v          # 22 条验收与边界用例
 python tests/e2e_check.py # 12 项 Web 层端到端验证
 ```
 
-### 4.4 云端部署（当前线上地址）
+### 4.4 免费公网部署（尚未完成）
 
 **线上地址：** `https://<你的用户名>.pythonanywhere.com` ← 部署后回填实际地址
 
-本项目可部署到多家免费 PaaS，**均无需绑定信用卡**。详细步骤见 `docs/` 下的部署文档。
+当前尚未取得并验证公网地址。推荐使用 PythonAnywhere 免费账户，数据库保存在用户目录，应用重载后仍然保留。免费账户限制和注册条件以平台页面为准；不要选择付费方案或绑定支付方式。
 
 | 平台 | 配置文件 | 免费额度 | 说明 |
 |---|---|---|---|
-| **PythonAnywhere（推荐）** | 手动配置，见 `docs/部署_PythonAnywhere.md` | 1 个 Web 应用，512 MB | **免卡、永不休眠**；需每月点一次续期 |
-| Render | `render.yaml` | 750 实例小时/月 | 免卡；15 分钟休眠，首次打开约 1 分钟唤醒 |
-| Railway | `railway.json` | $1/月额度 | 免卡但**免费资源额度已用尽时无法新建服务** |
+| **PythonAnywhere（推荐）** | `deploy/pythonanywhere_wsgi.py` | 1 个 Web 应用、512 MiB 磁盘 | 免费 Web 应用有效期 1 个月，需在平台续期 |
+| Render（非默认方案） | `render.yaml` | 以平台当前免费计划为准 | 当前配置使用临时盘，不满足重启后数据保留要求 |
+| Railway（非默认方案） | `railway.json` | 以账户剩余额度为准 | 不保证零费用；未配置持久卷前不作为交付方案 |
 
 **PythonAnywhere 部署（推荐）：**
 
 完整步骤见 **`docs/部署_PythonAnywhere.md`**，要点如下：
 
 1. 注册 <https://www.pythonanywhere.com/registration/register/beginner/>（无信用卡，用户名即网址前缀）
-2. Consoles → Bash：`git clone https://github.com/cql123-love/CampusEvent.git` → 建虚拟环境 → `pip install -r requirements.txt` → `python seed.py`
+2. Consoles → Bash：克隆仓库，以 Web 页面支持的 Python 3.11 或更高版本建立虚拟环境，然后执行 `pip install -r requirements.txt`。
 3. Web → Add a new web app → **Manual configuration** → 选与虚拟环境一致的 Python 版本
 4. Virtualenv 填 `/home/<用户名>/.virtualenvs/campusevent-env`
-5. WSGI 文件改为：
-   ```python
-   import sys, os
-   project_home = '/home/<用户名>/CampusEvent'
-   if project_home not in sys.path:
-       sys.path.insert(0, project_home)
-   os.environ['CAMPUSEVENT_SEED'] = '1'
-   from app import app as application
+5. 将仓库中的 WSGI 配置复制到平台指定的 WSGI 文件：
+   ```bash
+   cp ~/CampusEvent/deploy/pythonanywhere_wsgi.py /var/www/<用户名>_pythonanywhere_com_wsgi.py
    ```
+   目标路径以 Web 页面显示的 **WSGI configuration file** 为准。配置会自动使用 `/home/<用户名>/CampusEvent/instance/campusevent.db`，只在空库中生成演示数据，不要设置数据库到 `/tmp`。
 6. Static files 映射 `/static/` → `/home/<用户名>/CampusEvent/static`，然后点 **Reload**
 
 **Render / Railway 部署：**
@@ -161,7 +157,11 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 | 环境变量 | `CAMPUSEVENT_DB=/tmp/campusevent.db`（可选） |
 | 工作目录 | 仓库根目录（**不设 rootDir**，确保 templates/static 与本地运行一致）|
 
-> 云端实例磁盘为临时盘，重新部署后数据会重置；系统检测到云端环境时会自动写入演示数据（5 个活动 + 4 个学生 + 若干报名与消息），便于直接查看界面效果。
+> Render/Railway 的默认实例磁盘是临时盘，以上旧配置仅供参考，不作为符合 C10 的最终交付。PythonAnywhere 方案使用用户目录中的持久文件；重载应用不会主动清空数据库。首次生成 5 个活动、4 个学生和 1 个管理员，后续不会重复生成。
+>
+> WSGI 配置启用 HTTPS 安全 Cookie，并在每次启动时生成随机会话密钥。重载可能清除一次性提示消息，但不会丢失数据库记录。需要稳定会话时，可在平台私有配置中设置 `CAMPUSEVENT_SECRET`，不得将密钥提交到 Git。
+>
+> 本项目按指导书使用公开演示身份，没有真实登录权限控制。公网演示只使用虚拟活动与演示账号，不要录入真实个人信息。
 
 ---
 
@@ -199,7 +199,7 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 
 | 标签 | 含义 | 说明 |
 |---|---|---|
-| `baseline-v1` | 初始验收版本 | C1~C10 全部通过、云端部署完成时打标 |
+| `baseline-v1` | 初始验收版本 | 标签已存在；不代表已完成公网部署 |
 | `change-v2` | 需求变更完成版本 | 收到教师变更单后，在新分支实现并回归通过时打标 |
 
 > **变更实施规范：** 变更单（CR）未发布前不得提前实现；变更须在新分支上进行，**不得删除项目重建**；须保留每次关键修改的 Git 差异与 AI 交互记录。

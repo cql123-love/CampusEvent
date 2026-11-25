@@ -1,4 +1,4 @@
-# CampusEvent 部署到 PythonAnywhere（免信用卡 · 永不休眠）
+# CampusEvent 部署到 PythonAnywhere 免费账户
 
 > 适用于：需要「公网可访问、不用自己开电脑、不绑卡」的场景。
 > 结果：获得 `https://<你的用户名>.pythonanywhere.com` 固定地址。
@@ -10,7 +10,7 @@
 | 优势 | 说明 |
 |---|---|
 | **不需要信用卡** | 注册只要用户名 + 邮箱 + 密码 |
-| **永不休眠** | 与 Render（15 分钟休眠）、Railway（会 sleep）不同，免费版也常驻 |
+| **托管 Web 应用** | 由平台运行，不需要本机保持开机；免费应用需按平台提示续期 |
 | **github.com 在白名单** | 免费账户可 `git clone` 拉取仓库 |
 | **Web 应用不消耗 CPU 配额** | 免费 100 CPU 秒/天仅计控制台任务，网页访问不受影响 |
 
@@ -50,19 +50,19 @@ git clone https://github.com/cql123-love/CampusEvent.git
 # 2.2 进入目录
 cd ~/CampusEvent
 
-# 2.3 创建虚拟环境（用你账号的 Python 版本，下面以 3.10 为例）
-mkvirtualenv --python=/usr/bin/python3.10 campusevent-env
+# 2.3 创建虚拟环境（选 Web 页面支持的 Python 3.11 或更高版本）
+mkvirtualenv --python=/usr/bin/python3.13 campusevent-env
 
 # 2.4 安装依赖
 pip install -r requirements.txt
 
-# 2.5 写入演示数据（可跳过，但建议执行，这样打开就有数据可看）
-python seed.py
+# 2.5 运行测试；演示数据由 WSGI 配置在首次启动时写入
+pytest tests/ -v
 ```
 
-> 若 `mkvirtualenv` 提示找不到 python3.10，改用 `python3.13` 或先执行 `ls /usr/bin/python3*` 查看可用版本。
+> 若找不到 python3.13，先执行 `ls /usr/bin/python3*`，选一个 Web 页面也支持的 Python 3.11 或更高版本。
 
-执行成功后应看到：
+首次启动 Web 应用后，数据库应包含：
 
 ```
 演示数据：活动 5 个 / 学生 5 位 / 报名 4 条 / 消息 2 条
@@ -76,7 +76,7 @@ python seed.py
 
 1. 点 **Next**（若提示域名，确认使用 `<用户名>.pythonanywhere.com`）
 2. 选择 **Manual configuration**（**不要选 Flask**！我们要自己配 WSGI，才能用项目的 `app.py`）
-3. 选择 Python 版本，**必须与第 2 步建虚拟环境用的版本一致**（如 Python 3.10）
+3. 选择 Python 版本，**必须与第 2 步建虚拟环境用的版本一致**（如 Python 3.13）
 4. 点 **Next** 完成创建
 
 ---
@@ -96,26 +96,15 @@ python seed.py
 在同一 **Web** 页面找到 **Code** 区域，点 **WSGI configuration file** 链接
 （路径形如 `/var/www/<用户名>_pythonanywhere_com_wsgi.py`）。
 
-**把文件内容全部删掉**，替换为下面这段（记得改 `<你的用户名>`）：
+推荐在 Bash 控制台执行下面的命令，将仓库中经过测试的配置复制过去。将目标路径替换为 Web 页面实际显示的 WSGI 路径：
 
-```python
-import sys
-import os
-
-# 项目路径
-project_home = '/home/<你的用户名>/CampusEvent'
-if project_home not in sys.path:
-    sys.path.insert(0, project_home)
-
-# 引入 Flask 应用对象（app.py 中的 app 变量）
-os.environ['CAMPUSEVENT_SEED'] = '1'      # 首次访问时自动写入演示数据
-from app import app as application
+```bash
+cp ~/CampusEvent/deploy/pythonanywhere_wsgi.py /var/www/<用户名>_pythonanywhere_com_wsgi.py
 ```
 
-> ⚠️ 关键点：`from app import app as application`
-> —— `app.py` 里定义的是 Flask 实例 `app`，PythonAnywhere 要求变量名必须是 `application`。
+这份配置自动定位 `/home/<用户名>/CampusEvent`，在 `instance/campusevent.db` 中持久保存数据，并只对空库初始化演示数据。无需手动修改 Python 中的用户名。不要将 `CAMPUSEVENT_DB` 指向 `/tmp`。
 
-保存文件。
+如需使用不同项目目录，在该 WSGI 文件开头设置 `CAMPUSEVENT_HOME` 后再执行原配置。文件中的随机会话密钥只影响提示消息，数据库不会因 Reload 被重置。
 
 ---
 
@@ -150,6 +139,7 @@ from app import app as application
 | `/admin` 管理后台 | 显示「待审核报名队列」 |
 | `/messages` 消息中心 | 显示 2 条演示消息 |
 | 完整流程 | 创建活动 → 学生报名 → 管理员审批 → 取消报名 → 统计变化 |
+| 重载后数据 | 新建一条虚拟活动并报名，点击 Reload 后活动、报名和消息仍然存在 |
 
 ---
 
@@ -190,7 +180,7 @@ PythonAnywhere 免费账户的 Web 应用**每月需要点一次续期**，否�
 
 | 项 | StudyTask（Railway） | CampusEvent（PythonAnywhere） |
 |---|---|---|
-| 休眠 | 会 sleep | **不休眠** |
+| 维护 | 受计划和额度限制 | 免费 Web 应用需按平台提示续期 |
 | 绑卡 | 免卡 | **免卡** |
 | 部署方式 | Git 自动构建 | **手动 clone + WSGI 配置** |
 | 地址 | `xxx.up.railway.app` | `<用户名>.pythonanywhere.com` |
