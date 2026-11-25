@@ -108,7 +108,31 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 
 **线上地址：** `https://studytask-production-44f96ffe.up.railway.app` ← 部署后回填实际地址
 
-仓库内已提供 `railway.json`，Render 亦可（`render.yaml`）：
+本项目可部署到多家免费 PaaS，**均无需绑定信用卡**。仓库内已提供 `render.yaml` 与 `railway.json` 两套配置。
+
+| 平台 | 配置文件 | 免费额度 | 说明 |
+|---|---|---|---|
+| **Render（推荐）** | `render.yaml` | 750 实例小时/月 | **免卡**，支持多个免费服务；15 分钟无访问休眠，首次打开需等约 1 分钟唤醒 |
+| Railway | `railway.json` | $5 试用额度 → $1/月 | 免卡但**每个账号仅 1 个免费项目**，第二个需付费 |
+| PythonAnywhere | 手动 | 1 个 Web 应用 | 免卡、**从不休眠**，适合需要常在线的场景 |
+
+**Render 部署步骤（推荐）：**
+
+1. 打开 <https://dashboard.render.com/blueprint/new?repo=https%3A%2F%2Fgithub.com%2Fcql123-love%2FCampusEvent>
+2. 页面确认后点击 **Apply**（首次需先「用 GitHub 登录」并授权仓库访问）
+3. 等待构建完成（约 2~5 分钟），生成 `https://campusevent-xxxx.onrender.com` 固定地址
+
+> ⚠️ 若创建时看到 **Starter / $7 per month** 之类的选项，**务必选 Free**——只有选付费实例才会要求绑定信用卡。
+> 若 `render.com` 主域名因网络 DNS 污染打不开，改用 **https://dashboard.render.com/** 亦可。
+
+**Railway 部署步骤：**
+
+1. 打开 <https://railway.com/new> → 用 GitHub 登录 → 选择 **GitHub Repository**
+2. 首次点 **Configure GitHub App** 授权（选 *Only select repositories* 并勾选 `CampusEvent`），授权后点 **Refresh**
+3. 选择 `cql123-love/CampusEvent`，Railway 自动读取 `railway.json` 完成构建
+4. 在 Service 的 **Settings → Networking** 点 **Generate Domain** 获得公网地址
+
+**部署配置对照：**
 
 | 配置项 | 值 |
 |---|---|
@@ -116,14 +140,7 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 | Start Command | `gunicorn app:app --bind 0.0.0.0:$PORT` |
 | Healthcheck Path | `/` |
 | 环境变量 | `CAMPUSEVENT_DB=/tmp/campusevent.db`（可选） |
-| 部署平台 | Railway Free 计划（$0/月，**无需信用卡**） |
-
-**复现部署步骤：**
-
-1. 打开 <https://railway.com/new> → 用 GitHub 登录 → 选择 **GitHub Repository**
-2. 首次需点 **Configure GitHub App** 授权（Repository access 选 *Only select repositories* 并勾选 `CampusEvent`），授权后点 **Refresh**
-3. 选择 `cql123-love/CampusEvent`，Railway 会自动读取 `railway.json` 完成构建
-4. 构建完成后自动分配固定域名；或在 Service 的 **Settings → Networking** 点 **Generate Domain**
+| 工作目录 | 仓库根目录（**不设 rootDir**，确保 templates/static 与本地运行一致）|
 
 > 云端实例磁盘为临时盘，重新部署后数据会重置；系统检测到云端环境时会自动写入演示数据（5 个活动 + 4 个学生 + 若干报名与消息），便于直接查看界面效果。
 

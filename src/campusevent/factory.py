@@ -205,12 +205,12 @@ def build_app(db_path: str | None = None):
 
     from .routes import bp
 
+    # 项目根目录 = 本文件(src/campusevent/factory.py)向上三级
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     app = Flask(
         __name__,
-        template_folder=os.path.join(os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__)))), "templates"),
-        static_folder=os.path.join(os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__)))), "static"),
+        template_folder=os.path.join(project_root, "templates"),
+        static_folder=os.path.join(project_root, "static"),
     )
     app.config["SECRET_KEY"] = os.environ.get("CAMPUSEVENT_SECRET", "campusevent-dev-secret")
     container = AppContainer(db_path)

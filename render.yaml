@@ -3,9 +3,15 @@ services:
     name: campusevent
     runtime: python
     plan: free
+    # 不设置 rootDir：工作目录保持仓库根目录，
+    # 这样 app.py 与 templates/ static/ 的相对关系与本地运行完全一致。
+    # 若设 rootDir: src，则 templates/ static/ 需另行指定，易出错。
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --access-logfile -
     healthCheckPath: /
+    autoDeploy: true
     envVars:
       - key: CAMPUSEVENT_DB
         value: /tmp/campusevent.db
+      - key: PYTHONUNBUFFERED
+        value: "1"
