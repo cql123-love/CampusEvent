@@ -104,7 +104,31 @@ pytest tests/ -v          # 22 条验收与边界用例
 python tests/e2e_check.py # 12 项 Web 层端到端验证
 ```
 
-### 4.4 免费公网部署（尚未完成）
+### 4.4 腾讯云 Ubuntu 部署（当前方案，公网待验证）
+
+前提：已领取云服务器试用或零元资源。脚本不会购买产品、修改云计费或启用自动续费；云实例、磁盘、流量是否收费及到期日仍需在控制台确认。
+
+在服务器的 `ubuntu` 用户终端执行：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git
+git clone https://github.com/cql123-love/CampusEvent.git ~/CampusEvent
+cd ~/CampusEvent
+bash deploy/ubuntu.sh <服务器公网IPv4>
+```
+
+若目录已经存在，不要重复 clone 或删除目录，先检查其内容。脚本安装 Nginx、建立 Python 虚拟环境、运行全部测试，再创建 `campusevent` systemd 服务。Gunicorn 仅监听 `127.0.0.1:8000`，Nginx 提供 HTTP 80 端口；应用以当前普通用户运行。
+
+- 腾讯云安全组仅需额外允许入站 TCP 80（来源 `0.0.0.0/0`），无需开放 5000 或 8000。
+- 数据库保存在 `~/CampusEvent/instance/campusevent.db`，服务重启不会清空。会话密钥存储在同目录的 `production.env`，不提交 Git。
+- 首次仅生成虚拟演示数据。应用为公开教学演示，不含真实账号权限系统，不得录入敏感数据。
+- 维护：`sudo systemctl status campusevent`；日志：`sudo journalctl -u campusevent -n 60 --no-pager`；重启：`sudo systemctl restart campusevent`。
+- 更新：`git pull --ff-only`，`.venv/bin/python -m pip install -r requirements.txt`，`.venv/bin/python -m pytest tests/ -v`，最后重启服务。
+- 验收：用外部浏览器访问 `http://<服务器公网IPv4>/`，验证创建活动、报名、审批、消息，再重启 `campusevent` 确认记录保留。服务器内部 HTTP 检查不等于公网验收。
+- 这是 HTTP 演示地址，不代表已配置 HTTPS。若平台要求域名备案、限制 IP 访问或试用到期，须按平台规则处理，不绕过限制。
+
+### 4.5 PythonAnywhere 备选方案（未部署）
 
 **线上地址：** `https://<你的用户名>.pythonanywhere.com` ← 部署后回填实际地址
 
