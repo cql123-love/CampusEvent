@@ -98,6 +98,7 @@ def seed_demo_data(db_path: str | None = None) -> None:
     仅在数据库为空时执行；云端环境（存在 PORT 等标志）下自动触发。
     """
     path = db_path or os.environ.get("CAMPUSEVENT_DB", DEFAULT_DB_PATH)
+    init_db(path)                       # 确保表已建，支持独立运行 seed 脚本
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     try:
@@ -217,8 +218,13 @@ def build_app(db_path: str | None = None):
     app.config["CONTAINER"] = container
     app.register_blueprint(bp)
 
-    # 演示模式：检测到云端环境时自动写入演示数据
-    if any(os.environ.get(k) for k in ("PORT", "RAILWAY_ENVIRONMENT", "RENDER", "DYNO")):
+    # 演示模式：检测到云端环境或显式开启时自动写入演示数据
+    # （PythonAnywhere 等平台没有 PORT 等标志，可用 CAMPUSEVENT_SEED=1 或 seed.py 手动触发）
+    cloud_hint = any(
+        os.environ.get(k)
+        for k in ("PORT", "RAILWAY_ENVIRONMENT", "RENDER", "DYNO", "PYTHONANYWHERE_DOMAIN")
+    )
+    if cloud_hint or os.environ.get("CAMPUSEVENT_SEED") == "1":
         seed_demo_data(container.db_path)
 
     return app, container

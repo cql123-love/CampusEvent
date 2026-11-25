@@ -106,17 +106,36 @@ python tests/e2e_check.py # 12 项 Web 层端到端验证
 
 ### 4.4 云端部署（当前线上地址）
 
-**线上地址：** `https://studytask-production-44f96ffe.up.railway.app` ← 部署后回填实际地址
+**线上地址：** `https://<你的用户名>.pythonanywhere.com` ← 部署后回填实际地址
 
-本项目可部署到多家免费 PaaS，**均无需绑定信用卡**。仓库内已提供 `render.yaml` 与 `railway.json` 两套配置。
+本项目可部署到多家免费 PaaS，**均无需绑定信用卡**。详细步骤见 `docs/` 下的部署文档。
 
 | 平台 | 配置文件 | 免费额度 | 说明 |
 |---|---|---|---|
-| **Render（推荐）** | `render.yaml` | 750 实例小时/月 | **免卡**，支持多个免费服务；15 分钟无访问休眠，首次打开需等约 1 分钟唤醒 |
-| Railway | `railway.json` | $5 试用额度 → $1/月 | 免卡但**每个账号仅 1 个免费项目**，第二个需付费 |
-| PythonAnywhere | 手动 | 1 个 Web 应用 | 免卡、**从不休眠**，适合需要常在线的场景 |
+| **PythonAnywhere（推荐）** | 手动配置，见 `docs/部署_PythonAnywhere.md` | 1 个 Web 应用，512 MB | **免卡、永不休眠**；需每月点一次续期 |
+| Render | `render.yaml` | 750 实例小时/月 | 免卡；15 分钟休眠，首次打开约 1 分钟唤醒 |
+| Railway | `railway.json` | $1/月额度 | 免卡但**免费资源额度已用尽时无法新建服务** |
 
-**Render 部署步骤（推荐）：**
+**PythonAnywhere 部署（推荐）：**
+
+完整步骤见 **`docs/部署_PythonAnywhere.md`**，要点如下：
+
+1. 注册 <https://www.pythonanywhere.com/registration/register/beginner/>（无信用卡，用户名即网址前缀）
+2. Consoles → Bash：`git clone https://github.com/cql123-love/CampusEvent.git` → 建虚拟环境 → `pip install -r requirements.txt` → `python seed.py`
+3. Web → Add a new web app → **Manual configuration** → 选与虚拟环境一致的 Python 版本
+4. Virtualenv 填 `/home/<用户名>/.virtualenvs/campusevent-env`
+5. WSGI 文件改为：
+   ```python
+   import sys, os
+   project_home = '/home/<用户名>/CampusEvent'
+   if project_home not in sys.path:
+       sys.path.insert(0, project_home)
+   os.environ['CAMPUSEVENT_SEED'] = '1'
+   from app import app as application
+   ```
+6. Static files 映射 `/static/` → `/home/<用户名>/CampusEvent/static`，然后点 **Reload**
+
+**Render / Railway 部署：**
 
 1. 打开 <https://dashboard.render.com/blueprint/new?repo=https%3A%2F%2Fgithub.com%2Fcql123-love%2FCampusEvent>
 2. 页面确认后点击 **Apply**（首次需先「用 GitHub 登录」并授权仓库访问）
