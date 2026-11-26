@@ -1,0 +1,78 @@
+@startuml
+skinparam defaultFontName "Microsoft YaHei"
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+title CR-01 年级限定报名（设计稿，尚未实现）
+
+actor 学生 as User
+participant "Flask Route" as Route
+participant RegistrationService as Service
+participant ActivityRepository as Activities
+participant StudentRepository as Students
+participant RegistrationRepository as Registrations
+participant PolicyFactory as Factory
+participant "RegistrationPolicy\n运行时为 GradeLimitedDirectPolicy" as Policy
+participant EventPublisher as Publisher
+
+User -> Route : POST /register/<activity_id>
+Route -> Service : submit(activity_id, student_id)
+Service -> Activities : get(activity_id)
+Activities --> Service : Activity 或 None
+Service -> Students : get(student_id)
+Students --> Service : Student（包含 grade）或 None
+
+break 活动或学生不存在
+  Service --> Route : BusinessError
+  Route --> User : 显示错误，不生成报名
+end
+
+Service -> Service : _check_common_rules(activity, student)\n活动未开始；无重复有效报名
+Service -> Registrations : has_effective(activity_id, student_id)
+Registrations --> Service : 是否已有待审核 / 已通过报名
+break 已开始或已有有效报名
+  Service --> Route : BusinessError（已开始 / 不可重复报名）
+  Route --> User : 显示原因，不生成报名和通知
+end
+
+Service -> Factory : create(activity.policy_type)
+Factory --> Service : GradeLimitedDirectPolicy
+Service -> Policy : submit(activity, student)
+break grade 不属于 {2,3}
+  Policy --> Service : BusinessError（仅限大二、大三学生）
+  Service --> Route : 同一业务异常
+  Route --> User : 明确提示，不生成报名和通知
+end
+Policy --> Service : 已通过
+
+Service -> Policy : requires_quota()
+Policy --> Service : True
+Service -> Service : _check_quota(activity)
+Service -> Registrations : count_approved(activity_id)
+Registrations --> Service : 已通过人数
+break 已通过人数 >= capacity
+  Service --> Route : BusinessError（名额已满）
+  Route --> User : 显示原因，不生成报名和通知
+end
+
+group 报名持久化事务
+  Service -> Registrations : insert(Registration{已通过})
+  Registrations -> Registrations : INSERT + COMMIT
+  Registrations --> Service : 已保存
+end
+
+Service -> Publisher : publish(RegistrationEvent{已通过})
+ref over Publisher
+  见 09：站内消息 + 模拟邮件
+  通知在报名提交之后，失败不回滚报名
+end ref
+Service --> Route : Registration{已通过}
+Route --> User : 重定向，显示报名成功
+
+note over Service,Policy
+  执行次序与现有 submit 保持一致：
+  公共时间 / 重复校验 → 策略 → 名额 → 保存 → 发布。
+  普通直接报名、审核型报名仍使用原策略，不检查年级。
+  审核型提交仍为待审核，暂不占名额。
+end note
+@enduml

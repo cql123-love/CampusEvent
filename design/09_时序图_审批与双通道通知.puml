@@ -1,0 +1,96 @@
+@startuml
+skinparam defaultFontName "Microsoft YaHei"
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+title CR-02 审批与双通道通知（设计稿，尚未实现）
+
+actor 管理员 as Admin
+participant "Flask Route" as Route
+participant RegistrationService as Service
+participant RegistrationRepository as Registrations
+participant ActivityRepository as Activities
+participant ReviewPolicy as Policy
+participant EventPublisher as Publisher
+participant MessageNotifier as Messages
+participant EmailNotifier as Email
+participant MockEmailSender as Sender
+participant MockEmailRepository as Emails
+database SQLite as DB
+
+Admin -> Route : POST /admin/review/<registration_id>\napproved=1 或 0
+Route -> Service : review(registration_id, approved)
+Service -> Registrations : get(registration_id)
+Registrations --> Service : Registration
+break 不存在或不再是待审核（含重复审批）
+  Service --> Route : BusinessError
+  Route --> Admin : 提示原因；不修改、不发布事件
+end
+Service -> Activities : get(activity_id)
+Activities --> Service : Activity
+break 活动不存在
+  Service --> Route : BusinessError
+end
+opt approved=True
+  Service -> Service : _check_quota(activity)
+  Service -> Registrations : count_approved(activity_id)
+  Registrations --> Service : 已通过人数
+  break 名额已满
+    Service --> Route : BusinessError；报名保持待审核
+  end
+end
+Service -> Policy : review(activity, registration, approved)
+Policy --> Service : 已通过 / 已拒绝
+group 独立的报名更新事务
+  Service -> Registrations : update(registration)
+  Registrations -> DB : UPDATE registrations + COMMIT
+  DB --> Registrations : 已提交
+end
+
+Service -> Publisher : publish(event)
+note over Publisher,Emails
+  直接报名通过时也复用下方通知流程。
+  每个订阅者独立执行；一个失败不阻止另一个。
+end note
+Publisher -> Messages : update(event)
+Messages -> DB : INSERT messages\nUNIQUE(related_registration_id, event_type)
+DB --> Messages : 写入 / 重复则跳过
+opt 站内写入失败
+  Messages -> DB : 写 notification_log
+end
+
+Publisher -> Email : update(event)
+alt event_type 是已通过或已拒绝
+  Email -> Sender : send_once(event, recipient, subject, content)
+  Sender -> Sender : 生成 MockEmail\n模拟成功或故障，不连接 SMTP
+  Sender -> Emails : record_once(email, failure_reason)
+  group 邮件记录的独立事务（不是报名事务）
+    Emails -> DB : INSERT mock_emails\nON CONFLICT(registration_id, event_type) DO NOTHING
+    alt 首次事件且模拟发送失败
+      Emails -> DB : 同一事务 INSERT notification_log\n邮件状态 FAILED，保留错误原因
+    else 首次事件且模拟发送成功
+      note right of DB : 邮件状态 SENT
+    else 已存在此事件（含重启后再次投递）
+      note right of DB : 不新增邮件或失败日志，不再次发送
+    end
+    Emails -> DB : COMMIT
+  end
+  Emails --> Sender : 是否新增记录
+  Sender --> Email : SENT / FAILED / 已记录
+else 待审核或已取消
+  note right of Email : 不生成邮件；原有站内消息仍保留
+end
+opt 邮件数据库自身不可用
+  Email -> Email : 捕获错误，写应用错误日志\n数据库可用时另写通知失败日志
+end
+Publisher --> Service : 各订阅者处理结束
+Service --> Route : 已提交的报名结果
+Route --> Admin : 显示审批结果
+
+note over Service,DB
+  不承诺崩溃后的最终送达，不增加后台重试队列。
+  FAILED 事件重复投递也不自动重试；取消后再报名是新 registration_id。
+  并发容量与重复报名的原子约束仍需实现阶段专项验证，
+  本图不把现有“先查询再写入”描述成并发安全事务。
+end note
+@enduml

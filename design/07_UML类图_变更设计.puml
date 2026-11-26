@@ -1,0 +1,186 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName "Microsoft YaHei"
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam linetype ortho
+hide empty members
+title CampusEvent / CR-01 + CR-02 变更类图（设计稿，尚未实现）
+
+package "领域实体" {
+  class Student {
+    student_id : str
+    name : str
+    created_at : str
+    grade : int <<新增，1..4>>
+  }
+  class Activity {
+    activity_id : str
+    start_at : str
+    capacity : int
+    policy_type : str
+    is_started() : bool
+  }
+  class Registration {
+    registration_id : str
+    activity_id : str
+    student_id : str
+    status : str
+    is_effective() : bool
+    is_cancellable() : bool
+  }
+  class Message {
+    related_registration_id : str
+    event_type : str
+    content : str
+  }
+  class MockEmail #E2F3E8 {
+    email_id : str
+    student_id : str
+    registration_id : str
+    event_type : str
+    recipient : str
+    subject : str
+    content : str
+    status : str
+    created_at : str
+    error : str
+  }
+}
+
+package "报名策略" {
+  abstract class RegistrationPolicy {
+    name : str
+    submit(activity, student) : str
+    review(activity, registration, approved) : str
+    requires_quota() : bool
+  }
+  class DirectPolicy
+  class ReviewPolicy
+  class GradeLimitedDirectPolicy #E2F3E8 {
+    submit(activity, student) : str
+  }
+  class PolicyFactory {
+    _registry : dict
+    create(policy_type) : RegistrationPolicy
+    registered_types() : tuple
+  }
+  class BusinessError <<既有异常，拟迁移到 errors.py>>
+}
+
+package "应用与装配" {
+  class RegistrationService {
+    submit(activity_id, student_id) : Registration
+    review(registration_id, approved) : Registration
+    cancel(registration_id, student_id) : Registration
+    _check_common_rules(activity, student)
+    _check_quota(activity)
+  }
+  class ActivityService {
+    create_activity(data) : Activity
+    update_activity(id, data) : Activity
+    statistics(activity_id) : dict
+  }
+  class AppContainer {
+    __init__(db_path)
+  }
+}
+
+package "事件与通知" {
+  class RegistrationEvent {
+    registration_id : str
+    event_type : str
+    student_id : str
+    activity_id : str
+    content : str
+    created_at : str
+  }
+  interface Observer {
+    update(event) : None
+  }
+  class EventPublisher {
+    subscribe(observer)
+    publish(event)
+  }
+  class MessageNotifier {
+    update(event)
+  }
+  class EmailNotifier #E2F3E8 {
+    update(event)
+  }
+  class MockEmailSender #E2F3E8 {
+    send_once(event, recipient, subject, content)
+  }
+}
+
+package "SQLite 仓储" {
+  class ActivityRepository
+  class StudentRepository
+  class RegistrationRepository
+  class MessageRepository
+  class NotificationLogRepository
+  class MockEmailRepository #E2F3E8 {
+    record_once(email, failure_reason) : bool
+    list_by_student(student_id) : list
+  }
+}
+
+Student "1" -- "0..*" Registration
+Activity "1" -- "0..*" Registration
+Student "1" -- "0..*" Message
+Registration "1" -- "0..*" MockEmail : 按事件区分
+RegistrationPolicy <|-- DirectPolicy
+RegistrationPolicy <|-- ReviewPolicy
+DirectPolicy <|-- GradeLimitedDirectPolicy
+GradeLimitedDirectPolicy ..> BusinessError : 年级不合格
+PolicyFactory ..> RegistrationPolicy : 返回抽象
+PolicyFactory ..> GradeLimitedDirectPolicy : 注册新增类型
+RegistrationService ..> PolicyFactory
+RegistrationService ..> RegistrationPolicy
+RegistrationService --> EventPublisher : 提交后 publish
+RegistrationService --> ActivityRepository
+RegistrationService --> StudentRepository
+RegistrationService --> RegistrationRepository
+ActivityService --> ActivityRepository
+ActivityService --> RegistrationRepository : 统计在服务层
+EventPublisher o-- Observer : 逐个隔离异常
+EventPublisher ..> RegistrationEvent
+Observer <|.. MessageNotifier
+Observer <|.. EmailNotifier
+MessageNotifier --> MessageRepository
+MessageNotifier --> NotificationLogRepository
+EmailNotifier --> MockEmailSender
+MockEmailSender --> MockEmailRepository
+MockEmailRepository ..> MockEmail
+MockEmailRepository --> NotificationLogRepository : 失败留痕，同一事务
+AppContainer ..> GradeLimitedDirectPolicy : 经工厂选择
+AppContainer ..> EmailNotifier : 新增订阅
+AppContainer ..> MessageNotifier : 保留订阅
+
+note bottom of GradeLimitedDirectPolicy
+  只对新类型检查 grade ∈ {2,3}
+  通过后复用直接报名行为
+  不重写时间、重复、名额检查
+end note
+
+note bottom of MockEmailSender
+  只处理“已通过 / 已拒绝”
+  无 SMTP，无真实邮件发送
+  收件地址使用 student_id@campusevent.invalid
+end note
+
+note bottom of MockEmailRepository
+  UNIQUE(registration_id, event_type)
+  SENT / FAILED 均持久化
+  原子写入记录与失败日志
+  重复事件不新增，不自动重试
+end note
+
+legend bottom
+  浅绿色 = 拟新增类；grade = 拟新增字段。
+  其余是现有结构的相关部分，不是所有字段与方法的完整清单。
+  原版图保留于 02/03/04；本图不是 change-v2 实现完成证明。
+endlegend
+@enduml
