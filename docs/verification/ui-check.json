@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-11-26T07:03:05.398Z",
+  "base": "http://127.0.0.1:5088",
+  "checks": [
+    {
+      "viewport": "desktop",
+      "route": "/?student=S002",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "desktop",
+      "route": "/messages?student=S002",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "desktop",
+      "route": "/admin/activity/new",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "desktop",
+      "route": "/activity/act-4f2512ac0a?student=S002",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "mobile",
+      "route": "/?student=S002",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "mobile",
+      "route": "/messages?student=S002",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "mobile",
+      "route": "/admin/activity/new",
+      "noPageOverflow": true
+    },
+    {
+      "viewport": "mobile",
+      "route": "/activity/act-4f2512ac0a?student=S002",
+      "noPageOverflow": true
+    }
+  ],
+  "pageErrors": [],
+  "flows": [
+    "grade1_rejected",
+    "grade2_approved",
+    "identity_preserved",
+    "both_channels_visible"
+  ],
+  "scope": "Real browser actions against a disposable local database; not production."
+}

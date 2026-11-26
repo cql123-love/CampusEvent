@@ -1,0 +1,10 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.13, pytest-9.2.0, pluggy-1.7.0
+rootdir: C:\Users\yhxwan\AppData\Local\Temp\campusevent-baseline-6zuw9vu2
+configfile: pytest.ini
+collected 22 items
+
+tests\test_campusevent.py ......................                         [100%]
+
+- generated xml file: D:\yingyong\obsidian\知识库\for me\CampusEvent\docs\verification\baseline-v1-tests.xml -
+============================= 22 passed in 3.28s ==============================

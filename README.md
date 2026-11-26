@@ -10,17 +10,30 @@
 
 > 需求依据：《软件工程》实验指导书 第三章 + 附录B（CampusEvent 初始需求与设计检查表）
 
-## CR 变更设计图（2026-11-26）
+## 老师验收入口：原版与新增版
 
-收到教师 CR-01（年级限定报名）和 CR-02（模拟邮件通知）后，本次先补充 GitHub 中的设计图与实现前影响分析：
+原版完整保存在 `baseline-v1`，不覆盖、不移动该标签；新增功能在 `change/cr01-cr02` 分支实现，由 `change-v2` 固定。根目录展示新版，不代表原版被删除，无需再复制维护两套目录。
+
+- [原版全部源码与原始文档](https://github.com/cql123-love/CampusEvent/tree/baseline-v1)
+- [变更版全部源码与文档](https://github.com/cql123-love/CampusEvent/tree/change-v2)
+- [两版逐文件差异](https://github.com/cql123-love/CampusEvent/compare/baseline-v1...change-v2)
+- [版本保留与分别运行方法](docs/两版代码说明.md)
+- [AI_DEV_LOG.md：指导书要求的过程记录](AI_DEV_LOG.md)
+
+## 变更版验收（2026-11-26）
+
+已实现教师 CR-01（年级限定报名）和 CR-02（模拟邮件通知），保留初版并提供实现前分析、代码差异和回归证据：
 
 - [初版 / 变更图对照与说明](design/变更图说明.md)
 - [变更版 UML 类图](design/07_UML类图_变更设计.svg)
 - [年级限定报名时序图](design/08_时序图_年级限定报名.svg)
 - [审批与双通道通知时序图](design/09_时序图_审批与双通道通知.svg)
 - [变更影响分析与测试计划](docs/变更影响分析.md)
+- [实际回归测试表](docs/变更回归测试表.md)：初版 22 项、变更版 77 项、Web 12 场景、浏览器桌面/手机 8 项检查
+- [可维护性指标](docs/可维护性对照.md)：新增 5 类；两个核心服务中修改 1 类，报名核心类 AST 未变
+- [项目总结](docs/项目总结.md)、[七页 PDF](docs/项目总结.pdf)、[Word 版](docs/项目总结.docx)、[答辩 PPT](docs/实验二答辩.pptx)
 
-**状态：以上是待实现设计，不是已完成的变更版功能。本次没有修改应用源码或线上服务器，也没有创建 `change-v2` 标签。** 初版图与 `baseline-v1` 保持不变。新增图提供 PlantUML 源码、SVG 和 PNG；历史图与实际代码的已知偏差列在图说明中。后续仍需实现 CR、回归验证、更新实现版图与报告。
+**仓库实现和本地验证已完成；腾讯云变更版尚未升级，同学评审签名仍须本人完成。** `baseline-v1` 不变，变更实现由 `change-v2` 固定。图已更新为实现版，设计稿仍可在 `995b351` 查看。线上升级必须先备份，步骤见 [变更版升级](docs/变更版部署升级.md)。
 
 ---
 
@@ -37,13 +50,14 @@
 
 ## 二、项目定位
 
-面向校园管理员与学生的活动报名系统：管理员发布活动，学生浏览并报名，报名结果通过站内消息通知。
+面向校园管理员与学生的活动报名系统：管理员发布活动，学生浏览并报名，报名结果通过站内消息与模拟邮件通知。
 
 **核心技术特征（实验二重点）：**
 
-- **策略模式** —— `RegistrationPolicy` 抽象 + `DirectPolicy` / `ReviewPolicy` 两个实现，表达"直接报名 / 审核型报名"这条变化轴
-- **观察者模式** —— `EventPublisher` + `Observer` + `MessageNotifier`，把"报名事件"与"站内通知写入"解耦
-- **SOLID 落地** —— SRP / OCP / ISP / DIP 的逐条说明与**如实报告的代价分析**（见 `design/05_设计原则说明.md`）
+- **策略模式**：原 `DirectPolicy` / `ReviewPolicy` 保留，新增 `GradeLimitedDirectPolicy`，仅新类型限制年级 2、3
+- **观察者模式**：同时订阅 `MessageNotifier` 与 `EmailNotifier`，在报名提交后处理通知，失败不回滚报名
+- **持久化与防重复**：SQLite 迁移、邮件事件唯一键、有效报名唯一索引、容量触发器与状态条件更新
+- **SOLID 与代价**：见 [变更版设计原则](design/10_变更版设计原则.md)，不将历史文字中的“全系统零修改”作为当前结论
 
 ---
 
@@ -65,9 +79,11 @@ CampusEvent/
 │
 ├── src/campusevent/
 │   ├── entities.py            实体层：Activity / Student / Registration / Message
-│   ├── repositories.py        仓储层：5 个仓储 + 通知日志仓储
-│   ├── policies.py            ★ 策略层：RegistrationPolicy + 2 实现 + 工厂
-│   ├── events.py              ★ 事件层：RegistrationEvent / Observer / EventPublisher / MessageNotifier
+│   ├── repositories.py        仓储层：6 个仓储（含邮件与通知日志）
+│   ├── policies.py            ★ 策略层：RegistrationPolicy + 3 实现 + 工厂
+│   ├── events.py              ★ 事件层：发布、站内消息、邮件订阅与 Mock 发送器
+│   ├── errors.py              共享业务异常
+│   ├── migrations.py          事务迁移与数据库最终约束
 │   ├── services.py            应用层：RegistrationService / ActivityService（业务编排）
 │   ├── routes.py              表现层：Flask 蓝图
 │   └── factory.py             装配层：数据库初始化 + 依赖注入 + 演示数据
@@ -76,6 +92,8 @@ CampusEvent/
 ├── tests/
 │   ├── conftest.py            每个用例独立临时库
 │   ├── test_campusevent.py    ★ C1~C10 验收用例 + 10 条边界补充（共 22 条）
+│   ├── test_changes.py        CR、通知故障、重复与并发（47 项）
+│   ├── test_migrations.py     旧库迁移、回滚与备份（6 项）
 │   └── e2e_check.py           Web 层端到端验证（12 项）
 │
 └── docs/                      截图、测试记录、变更分析等
@@ -106,6 +124,7 @@ python -m venv venv
 pip install -r requirements.txt
 
 # 4. 启动（默认 http://127.0.0.1:5000）
+python seed.py
 python app.py
 ```
 
@@ -114,9 +133,16 @@ python app.py
 ### 4.3 运行测试
 
 ```bash
-pytest tests/ -v          # 当前共 24 条，含 2 条部署配置测试
+pytest tests/ -v          # 当前 77 条，含 CR、边界、迁移、部署测试
 python tests/e2e_check.py # 12 项 Web 层端到端验证
+python tools/verify_release.py # 重跑初版、当前版并生成日志、XML、指标
 ```
+
+`tools/verify_release.py` 会更新 `docs/verification/` 中证据文件，建议在独立克隆中复现。若 Windows 的旧 pytest 临时目录权限异常，可运行 `pytest -p no:cacheprovider --basetemp <新的可写临时目录>`，不要修改业务断言来掩盖环境错误。
+
+界面新增的模拟邮件在“我的消息”下方。收件地址固定为 `学生ID@campusevent.invalid`，不连接 SMTP、不收费、不是真实外发邮件。故障演示可在独立测试环境设置 `CAMPUSEVENT_MOCK_EMAIL_FAIL=1` 后启动；已提交报名仍保留，邮件显示 FAILED 并记录错误。不要为此修改生产全部通知。
+
+可选真实浏览器验收：在单独本地演示库启动 5088 端口后运行 `node tools/ui_smoke.cjs`（需要 Playwright 与已安装浏览器；可设 `CAMPUSEVENT_BROWSER_CHANNEL=msedge`）。此脚本只接受 localhost URL，会实际新建演示活动和报名，不能对生产执行。浏览器依赖不属于 Flask 运行必需项。
 
 ### 4.4 腾讯云 Ubuntu 部署（当前线上方案）
 
@@ -138,7 +164,7 @@ bash deploy/ubuntu.sh <服务器公网IPv4>
 - 数据库保存在 `~/CampusEvent/instance/campusevent.db`，服务重启不会清空。会话密钥存储在同目录的 `production.env`，不提交 Git。
 - 首次仅生成虚拟演示数据。应用为公开教学演示，不含真实账号权限系统，不得录入敏感数据。
 - 维护：`sudo systemctl status campusevent`；日志：`sudo journalctl -u campusevent -n 60 --no-pager`；重启：`sudo systemctl restart campusevent`。
-- 更新：`git pull --ff-only`，`.venv/bin/python -m pip install -r requirements.txt`，`.venv/bin/python -m pytest tests/ -v`，最后重启服务。
+- 更新到变更版：按 [备份及升级说明](docs/变更版部署升级.md) 获取 `change-v2`，执行 `bash deploy/upgrade.sh`。脚本先测试，再停止服务、备份、事务迁移并重启；不要删库或运行 `seed.py --force`。
 - 验收：用外部浏览器访问 `http://<服务器公网IPv4>/`，验证创建活动、报名、审批、消息，再重启 `campusevent` 确认记录保留。服务器内部 HTTP 检查不等于公网验收。
 - 这是 HTTP 演示地址，不代表已配置 HTTPS。若平台要求域名备案、限制 IP 访问或试用到期，须按平台规则处理，不绕过限制。
 
@@ -207,15 +233,17 @@ bash deploy/ubuntu.sh <服务器公网IPv4>
 
 指导书允许使用固定演示账号，无需注册体系。系统内置：
 
-| 学号 | 姓名 | 角色 |
-|---|---|---|
-| S001 | 陈倩林 | 学生 |
-| S002 | 李明轩 | 学生 |
-| S003 | 王思远 | 学生 |
-| S004 | 赵雨桐 | 学生 |
-| A001 | 管理员 | 管理员 |
+| 学号 | 姓名 | 年级 | 角色 |
+|---|---|---|---|
+| S001 | 陈倩林 | 1 | 学生 |
+| S002 | 李明轩 | 2 | 学生 |
+| S003 | 王思远 | 3 | 学生 |
+| S004 | 赵雨桐 | 4 | 学生 |
+| A001 | 管理员 | 1（占位） | 管理员 |
 
 页面上可切换当前学生身份（右上角下拉框），用于演示"不同学生视角"。
+
+年级是虚拟演示数据，不推断实际姓名对应的真实年级。旧库升级只对上述演示 ID 设置映射，其他既有学生默认 1，不自动获得限定报名资格。新类型可在后台创建，首次种子仍为原有 5 个活动；升级不补发历史邮件。
 
 ---
 
@@ -226,7 +254,7 @@ bash deploy/ubuntu.sh <服务器公网IPv4>
 | R1 直接报名 → 已通过 + 通知 | `DirectPolicy.submit()` | C2 |
 | R2 审核型 → 待审核；批准时再查名额 | `ReviewPolicy` / `RegistrationService.review()` | C5、C6、C8 |
 | R3 名额按"已通过"计，待审核不占名额 | `_check_quota()` / `count_approved()` | C4、C8、B7 |
-| R4 禁止重复有效报名；取消后可再申请 | `_check_duplicate()` / `has_effective()` | C3、C3b |
+| R4 禁止重复有效报名；取消后可再申请 | `_check_common_rules()` / `has_effective()` / 部分唯一索引 | C3、C3b |
 | R5 可取消待审核/已通过；开始后不收新报名 | `cancel()` / `_check_common_rules()` | C9、B1 |
 | R6 通知失败留痕但不使报名消失 | 事务边界 + `MessageNotifier` 异常隔离 | **B5** |
 | R7 持久化；删有报名的活动要拒绝或软删除 | `ActivityService.delete_activity()`（本设计选**拒绝删除**） | B3、B4、C10 |
@@ -238,7 +266,7 @@ bash deploy/ubuntu.sh <服务器公网IPv4>
 | 标签 | 含义 | 说明 |
 |---|---|---|
 | `baseline-v1` | 初始验收版本 | 原始标签保持不变；云端部署使用后续部署提交，详见部署验收记录 |
-| `change-v2` | 需求变更完成版本 | CR 已收到，当前仅补设计图和影响分析；待新分支实现、回归通过后打标，尚不存在 |
+| `change-v2` | CR 实现与本地回归版本 | 年级策略、Mock 邮件、迁移、回归证据与材料；不代表生产已升级 |
 
 > **变更实施规范：** 变更单（CR）未发布前不得提前实现；变更须在新分支上进行，**不得删除项目重建**；须保留每次关键修改的 Git 差异与 AI 交互记录。
 
@@ -251,8 +279,14 @@ bash deploy/ubuntu.sh <服务器公网IPv4>
 | `design/00_设计决策说明.md` | 职责划分、依赖方向、两个关键取舍的理由、评审签字栏 |
 | `design/01_用例说明.md` | 7 个用例 + 业务规则追踪矩阵 |
 | `design/05_设计原则说明.md` | SOLID 逐条落地 + 模式收益与代价 + 未来扩展路径 |
+| `design/10_变更版设计原则.md` | 当前实现的设计理由、数据库保护和已知局限；历史文档偏差以此为准 |
 | `design/变更图说明.md` | 初版图与 CR 变更设计图入口、原图偏差校正、渲染方法 |
-| `docs/AI_DEV_LOG.md` | AI 协作关键事件记录（5~10 条） |
+| `AI_DEV_LOG.md` / `docs/AI_DEV_LOG.md` | 根目录入口与完整关键协作记录，含初版、部署和变更 |
 | `docs/需求验收表.md` | C1~C10 与边界用例的逐条验收记录 |
-| `docs/变更影响分析.md` | CR-01 / CR-02 实现前影响、设计取舍、迁移与测试计划（已补充，尚未实施） |
-| `docs/项目总结.md` | 待变更实现完成后撰写，目前尚未创建 |
+| `docs/初始SRS分析.md` | 依据初版需求补充整理的范围、职责与验收映射，不冒称编码前已存在 |
+| `docs/变更影响分析.md` | 保留实现前分析，并追加实际实现结果与差异 |
+| `docs/变更回归测试表.md` | 教师 CR 编号、原用例、边界、故障与迁移结果 |
+| `docs/可维护性对照.md` | 新类、核心类、回归、轮次和可确认修改时长的口径 |
+| `docs/项目总结.md` | 七部分报告，附七页 PDF、Word 版与答辩 PPT |
+
+材料再生成需要 Node.js、Playwright、已安装的 Chromium/Edge、`docx`、`pptxgenjs`、`pdf-lib`；运行 `node tools/build_materials.cjs`。脚本读取 Markdown 和实际测试汇总，生成 Word、PDF、PPT，并验证 PDF 七页及内容无溢出。Office 文件检查了结构，尚未逐页人工放映，提交前需本人打开审阅。

@@ -1,0 +1,49 @@
+{
+  "verified_at": "2026-11-26T15:24:15.385128+08:00",
+  "python": "3.12.13",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "tests": 77,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "pytest_exit": 0,
+  "web_e2e_exit": 0,
+  "metrics": {
+    "baseline": "07df65a01d559aa82f1e41c81e14807ec05904ac",
+    "baseline_class_count": 22,
+    "current_class_count": 27,
+    "new_classes": [
+      "EmailNotifier",
+      "GradeLimitedDirectPolicy",
+      "MockEmail",
+      "MockEmailRepository",
+      "MockEmailSender"
+    ],
+    "new_class_count": 5,
+    "modified_existing_classes": [
+      "Activity",
+      "ActivityRepository",
+      "ActivityService",
+      "AppContainer",
+      "BaseRepository",
+      "BusinessError",
+      "EventPublisher",
+      "MessageNotifier",
+      "NotificationLogRepository",
+      "PolicyFactory",
+      "RegistrationRepository",
+      "Student",
+      "StudentRepository"
+    ],
+    "modified_core_business_classes": [
+      "ActivityService"
+    ],
+    "registration_service_ast_unchanged": true,
+    "definition": "Top-level src classes, AST comparison, moves deduplicated by unique class name."
+  },
+  "scope": "Local temporary SQLite databases, not production server verification.",
+  "baseline_tests": 22,
+  "baseline_failures": 0,
+  "baseline_errors": 0,
+  "baseline_exit": 0
+}

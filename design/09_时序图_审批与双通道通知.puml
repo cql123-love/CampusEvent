@@ -3,7 +3,7 @@ skinparam defaultFontName "Microsoft YaHei"
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam sequenceMessageAlign center
-title CR-02 审批与双通道通知（设计稿，尚未实现）
+title CR-02 审批与双通道通知（change-v2 实现）
 
 actor 管理员 as Admin
 participant "Flask Route" as Route
@@ -43,7 +43,7 @@ Service -> Policy : review(activity, registration, approved)
 Policy --> Service : 已通过 / 已拒绝
 group 独立的报名更新事务
   Service -> Registrations : update(registration)
-  Registrations -> DB : UPDATE registrations + COMMIT
+  Registrations -> DB : UPDATE registrations WHERE 原状态仍可审批 + COMMIT\n容量触发器兜底
   DB --> Registrations : 已提交
 end
 
@@ -76,7 +76,7 @@ alt event_type 是已通过或已拒绝
     Emails -> DB : COMMIT
   end
   Emails --> Sender : 是否新增记录
-  Sender --> Email : SENT / FAILED / 已记录
+  Sender --> Email : 完成（结果已持久化或事件已存在）
 else 待审核或已取消
   note right of Email : 不生成邮件；原有站内消息仍保留
 end
@@ -90,7 +90,7 @@ Route --> Admin : 显示审批结果
 note over Service,DB
   不承诺崩溃后的最终送达，不增加后台重试队列。
   FAILED 事件重复投递也不自动重试；取消后再报名是新 registration_id。
-  并发容量与重复报名的原子约束仍需实现阶段专项验证，
-  本图不把现有“先查询再写入”描述成并发安全事务。
+  并发容量由数据库触发器兜底，重复有效报名由唯一索引兜底；
+  更新使用原状态条件；已增加并发与陈旧审批测试。
 end note
 @enduml

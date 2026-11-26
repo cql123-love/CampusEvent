@@ -33,7 +33,7 @@ umask 077
 .venv/bin/python tools/upgrade_database.py "$DB"
 sudo systemctl restart campusevent
 for attempt in {1..20}; do
-    if curl --fail --silent http://127.0.0.1/ | grep -q 'data-release="change-v2"'; then
+    if curl --fail --silent http://127.0.0.1/ | grep 'data-release="change-v2"' > /dev/null; then
         echo "LOCAL UPGRADE PASSED. Verify the public site, grade rules and mock emails."
         exit 0
     fi

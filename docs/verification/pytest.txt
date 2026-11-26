@@ -1,0 +1,13 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.13, pytest-9.2.0, pluggy-1.7.0
+rootdir: D:\yingyong\obsidian\知识库\for me\CampusEvent
+configfile: pytest.ini
+collected 77 items
+
+tests\test_campusevent.py ......................                         [ 28%]
+tests\test_changes.py ...............................................    [ 89%]
+tests\test_deployment.py ..                                              [ 92%]
+tests\test_migrations.py ......                                          [100%]
+
+- generated xml file: D:\yingyong\obsidian\知识库\for me\CampusEvent\docs\verification\change-v2-tests.xml -
+============================= 77 passed in 10.40s =============================

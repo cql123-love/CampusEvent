@@ -3,7 +3,7 @@ skinparam defaultFontName "Microsoft YaHei"
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam sequenceMessageAlign center
-title CR-01 年级限定报名（设计稿，尚未实现）
+title CR-01 年级限定报名（change-v2 实现）
 
 actor 学生 as User
 participant "Flask Route" as Route
@@ -57,7 +57,7 @@ end
 
 group 报名持久化事务
   Service -> Registrations : insert(Registration{已通过})
-  Registrations -> Registrations : INSERT + COMMIT
+  Registrations -> Registrations : INSERT + COMMIT\n数据库唯一索引和容量触发器兜底
   Registrations --> Service : 已保存
 end
 
