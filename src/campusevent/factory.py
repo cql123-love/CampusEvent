@@ -16,11 +16,13 @@ from .entities import (
     Activity,
     Student,
 )
-from .events import EventPublisher, MessageNotifier
+from .events import EmailNotifier, EventPublisher, MessageNotifier, MockEmailSender
+from .migrations import ACTIVITY_SCHEMA, migrate
 from .repositories import (
     DEFAULT_DB_PATH,
     ActivityRepository,
     MessageRepository,
+    MockEmailRepository,
     NotificationLogRepository,
     RegistrationRepository,
     StudentRepository,
@@ -31,20 +33,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS students (
     student_id  TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    grade INTEGER NOT NULL DEFAULT 1 CHECK(typeof(grade)='integer' AND grade BETWEEN 1 AND 4)
 );
-
-CREATE TABLE IF NOT EXISTS activities (
-    activity_id  TEXT PRIMARY KEY,
-    title        TEXT NOT NULL,
-    category     TEXT NOT NULL,
-    start_at     TEXT NOT NULL,
-    location     TEXT NOT NULL,
-    capacity     INTEGER NOT NULL CHECK (capacity > 0),
-    policy_type  TEXT NOT NULL CHECK (policy_type IN ('直接报名', '审核型')),
-    created_at   TEXT NOT NULL
-);
-
+""" + ACTIVITY_SCHEMA + """
 CREATE TABLE IF NOT EXISTS registrations (
     registration_id  TEXT PRIMARY KEY,
     activity_id      TEXT NOT NULL REFERENCES activities(activity_id),
@@ -78,18 +70,27 @@ CREATE TABLE IF NOT EXISTS notification_log (
     reason          TEXT NOT NULL,
     created_at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS mock_emails (
+    email_id TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL REFERENCES students(student_id),
+    registration_id TEXT NOT NULL REFERENCES registrations(registration_id),
+    event_type TEXT NOT NULL CHECK(event_type IN ('已通过','已拒绝')),
+    recipient TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('SENT','FAILED')),
+    created_at TEXT NOT NULL,
+    error TEXT NOT NULL DEFAULT '',
+    UNIQUE(registration_id, event_type)
+);
 """
 
 
 def init_db(db_path: str | None = None) -> None:
     """建表（幂等）。"""
     path = db_path or os.environ.get("CAMPUSEVENT_DB", DEFAULT_DB_PATH)
-    conn = sqlite3.connect(path)
-    try:
-        conn.executescript(SCHEMA)
-        conn.commit()
-    finally:
-        conn.close()
+    migrate(path, SCHEMA)
 
 
 def seed_demo_data(db_path: str | None = None) -> None:
@@ -115,10 +116,11 @@ def seed_demo_data(db_path: str | None = None) -> None:
             ("S004", "赵雨桐"),
             ("A001", "管理员"),
         ]
+        grades = {"S001": 1, "S002": 2, "S003": 3, "S004": 4, "A001": 1}
         for sid, name in students:
             conn.execute(
-                "INSERT OR IGNORE INTO students (student_id, name, created_at) VALUES (?,?,?)",
-                (sid, name, now),
+                "INSERT OR IGNORE INTO students (student_id, name, created_at, grade) VALUES (?,?,?,?)",
+                (sid, name, now, grades[sid]),
             )
 
         activities = [
@@ -187,11 +189,17 @@ class AppContainer:
         self.registration_repo = RegistrationRepository(self.db_path)
         self.message_repo = MessageRepository(self.db_path)
         self.notification_log_repo = NotificationLogRepository(self.db_path)
+        self.email_repo = MockEmailRepository(self.db_path)
 
         # 观察者装配：发布者只认识 Observer 抽象
         self.publisher = EventPublisher()
         self.notifier = MessageNotifier(self.message_repo, self.notification_log_repo)
         self.publisher.subscribe(self.notifier)
+        self.email_sender = MockEmailSender(
+            self.email_repo, fail=os.environ.get("CAMPUSEVENT_MOCK_EMAIL_FAIL") == "1",
+        )
+        self.email_notifier = EmailNotifier(self.email_sender, self.notification_log_repo)
+        self.publisher.subscribe(self.email_notifier)
 
         self.registration_service = RegistrationService(
             self.activity_repo, self.student_repo, self.registration_repo,

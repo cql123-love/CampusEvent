@@ -25,6 +25,9 @@ if "--force" in sys.argv:
 
     if os.path.exists(db_path):
         conn = sqlite3.connect(db_path)
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='mock_emails'").fetchone():
+            conn.execute("DELETE FROM mock_emails")
+        conn.execute("DELETE FROM notification_log")
         conn.execute("DELETE FROM messages")
         conn.execute("DELETE FROM registrations")
         conn.execute("DELETE FROM activities")

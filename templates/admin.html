@@ -56,7 +56,7 @@
   <div class="card">
     <div class="card-head">
       <h3>{{ a.title }}</h3>
-      <span class="tag {{ 'tag-direct' if a.policy_type == '直接报名' else 'tag-review' }}">{{ a.policy_type }}</span>
+      <span class="tag {{ 'tag-review' if a.policy_type == '审核型' else 'tag-direct' }}">{{ a.policy_type }}</span>
     </div>
     <div class="card-meta">
       <div><span class="k">类型</span><span>{{ a.category }}</span></div>

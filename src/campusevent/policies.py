@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from .errors import BusinessError
 from .entities import (
+    POLICY_GRADE_LIMITED,
     STATUS_APPROVED,
     STATUS_PENDING,
     STATUS_REJECTED,
@@ -84,6 +86,17 @@ class ReviewPolicy(RegistrationPolicy):
         return True
 
 
+class GradeLimitedDirectPolicy(DirectPolicy):
+    """Only this new activity type restricts student grades."""
+
+    name = POLICY_GRADE_LIMITED
+
+    def submit(self, activity: Activity, student: Student) -> str:
+        if type(student.grade) is not int or student.grade not in (2, 3):
+            raise BusinessError("该活动仅限大二、大三学生报名")
+        return super().submit(activity, student)
+
+
 class PolicyFactory:
     """策略工厂 —— 系统中**唯一**知道具体实现类的地方。
 
@@ -94,6 +107,7 @@ class PolicyFactory:
     _registry = {
         "直接报名": DirectPolicy,
         "审核型": ReviewPolicy,
+        POLICY_GRADE_LIMITED: GradeLimitedDirectPolicy,
     }
 
     @classmethod

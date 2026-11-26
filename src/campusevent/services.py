@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .entities import (
+    ALL_POLICY_TYPES,
     ALL_STATUSES,
     POLICY_DIRECT,
     POLICY_REVIEW,
@@ -24,13 +25,11 @@ from .entities import (
     Registration,
     Student,
     new_id,
+    parse_start_at,
 )
+from .errors import BusinessError
 from .events import EventPublisher, RegistrationEvent
 from .policies import PolicyFactory, RegistrationPolicy
-
-
-class BusinessError(Exception):
-    """业务规则校验失败（携带面向用户的中文提示）。"""
 
 
 def _now() -> str:
@@ -209,6 +208,13 @@ class ActivityService:
         self._activity_repo = activity_repo
         self._registration_repo = registration_repo
 
+    @staticmethod
+    def _validated_start(value: str) -> str:
+        try:
+            return parse_start_at(value.strip()).strftime("%Y-%m-%d %H:%M")
+        except (ValueError, TypeError, AttributeError):
+            raise BusinessError("活动开始时间无效，请填写有效的日期和时间") from None
+
     def create_activity(self, data: dict) -> Activity:
         title = (data.get("title") or "").strip()
         if not title:
@@ -223,7 +229,7 @@ class ActivityService:
             raise BusinessError("人数上限必须为正整数")
 
         policy_type = (data.get("policy_type") or "").strip()
-        if policy_type not in (POLICY_DIRECT, POLICY_REVIEW):
+        if policy_type not in ALL_POLICY_TYPES:
             raise BusinessError("报名方式无效")
 
         category = (data.get("category") or "").strip() or "其他"
@@ -231,6 +237,7 @@ class ActivityService:
         start_at = (data.get("start_at") or "").strip()
         if not start_at:
             raise BusinessError("活动开始时间不能为空")
+        start_at = self._validated_start(start_at)
 
         activity = Activity(
             activity_id=new_id("act"),
@@ -270,10 +277,13 @@ class ActivityService:
         if data.get("location") is not None:
             activity.location = data["location"].strip() or activity.location
         if data.get("start_at") is not None:
-            activity.start_at = data["start_at"].strip() or activity.start_at
+            activity.start_at = self._validated_start(data["start_at"])
         if data.get("policy_type") is not None:
-            if data["policy_type"] not in (POLICY_DIRECT, POLICY_REVIEW):
+            if data["policy_type"] not in ALL_POLICY_TYPES:
                 raise BusinessError("报名方式无效")
+            if (data["policy_type"] != activity.policy_type and
+                    self._registration_repo.count_by_status(activity_id, STATUS_PENDING)):
+                raise BusinessError("存在待审核报名，不能修改报名方式")
             activity.policy_type = data["policy_type"]
 
         return self._activity_repo.update(activity)
@@ -287,12 +297,8 @@ class ActivityService:
         activity = self._activity_repo.get(activity_id)
         if activity is None:
             raise BusinessError("活动不存在")
-        for registration in self._registration_repo.list_by_activity(activity_id):
-            if registration.is_effective():
-                raise BusinessError(
-                    f"该活动存在 {registration.status} 的报名，无法删除；"
-                    "请先处理相关报名"
-                )
+        if self._registration_repo.list_by_activity(activity_id):
+            raise BusinessError("该活动存在报名历史，无法删除；请保留活动以供追溯")
         self._activity_repo.delete(activity_id)
 
     def list_activities(self, keyword: str = "") -> list[Activity]:

@@ -14,6 +14,7 @@ fd, db = tempfile.mkstemp(suffix=".db"); os.close(fd); os.unlink(db)
 app, container = build_app(db)
 container.student_repo.insert(Student(student_id="S001", name="陈倩林"))
 container.student_repo.insert(Student(student_id="S002", name="李明轩"))
+container.student_repo.insert(Student(student_id="S003", name="测试学生C"))
 app.config["TESTING"] = True
 c = app.test_client()
 

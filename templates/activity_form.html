@@ -43,13 +43,10 @@
       <select name="policy_type">
         {% for p in policy_types %}
           <option value="{{ p }}" {% if activity and activity.policy_type == p %}selected{% elif not activity and p == '直接报名' %}selected{% endif %}>
-            {{ p }}{% if p == '直接报名' %}（名额充足即自动通过）{% else %}（提交后需管理员审核）{% endif %}
+            {{ p }}{% if p == '直接报名' %}（名额充足即自动通过）{% elif p == '年级限定直接报名' %}（仅限大二、大三）{% else %}（提交后需管理员审核）{% endif %}
           </option>
         {% endfor %}
       </select>
-      <p class="hint" style="margin-top:6px;font-size:12px;color:var(--ink-3);">
-        报名方式对应策略模式中的实现类，变更活动类型不会影响报名流程代码。
-      </p>
     </div>
 
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line-2);display:flex;gap:10px;">

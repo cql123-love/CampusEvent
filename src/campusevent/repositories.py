@@ -11,9 +11,12 @@ from .entities import (
     STATUS_APPROVED,
     Activity,
     Message,
+    MockEmail,
     Registration,
     Student,
+    new_id,
 )
+from .errors import BusinessError
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_DB_PATH = os.path.join(BASE_DIR, "campusevent.db")
@@ -50,6 +53,18 @@ class BaseRepository:
         try:
             conn.execute(sql, params)
             conn.commit()
+        except sqlite3.IntegrityError as exc:
+            messages = {
+                "campusevent:quota": "名额已满",
+                "campusevent:capacity": "人数上限不能小于已通过报名数",
+                "campusevent:pending": "存在待审核报名，不能修改报名方式",
+            }
+            reason = messages.get(str(exc))
+            if "registrations.activity_id, registrations.student_id" in str(exc):
+                reason = "不可重复报名（同一活动仅允许一条有效报名）"
+            if reason:
+                raise BusinessError(reason) from exc
+            raise
         finally:
             conn.close()
 
@@ -76,7 +91,10 @@ class ActivityRepository(BaseRepository):
         return activity
 
     def delete(self, activity_id: str) -> None:
-        self.execute("DELETE FROM activities WHERE activity_id=?", (activity_id,))
+        try:
+            self.execute("DELETE FROM activities WHERE activity_id=?", (activity_id,))
+        except sqlite3.IntegrityError as exc:
+            raise BusinessError("该活动存在报名历史，无法删除") from exc
 
     def get(self, activity_id: str) -> Activity | None:
         row = self.query_one("SELECT * FROM activities WHERE activity_id=?", (activity_id,))
@@ -111,8 +129,8 @@ class StudentRepository(BaseRepository):
 
     def insert(self, student: Student) -> Student:
         self.execute(
-            "INSERT INTO students (student_id, name, created_at) VALUES (?,?,?)",
-            (student.student_id, student.name, student.created_at),
+            "INSERT INTO students (student_id, name, created_at, grade) VALUES (?,?,?,?)",
+            (student.student_id, student.name, student.created_at, student.grade),
         )
         return student
 
@@ -121,11 +139,12 @@ class StudentRepository(BaseRepository):
         if not row:
             return None
         return Student(student_id=row["student_id"], name=row["name"],
-                       created_at=row["created_at"])
+                       created_at=row["created_at"], grade=row["grade"])
 
     def list(self) -> list[Student]:
         return [
-            Student(student_id=r["student_id"], name=r["name"], created_at=r["created_at"])
+            Student(student_id=r["student_id"], name=r["name"], created_at=r["created_at"],
+                    grade=r["grade"])
             for r in self.query("SELECT * FROM students ORDER BY student_id")
         ]
 
@@ -143,10 +162,24 @@ class RegistrationRepository(BaseRepository):
         return registration
 
     def update(self, registration: Registration) -> Registration:
-        self.execute(
-            "UPDATE registrations SET status=?, updated_at=? WHERE registration_id=?",
-            (registration.status, registration.updated_at, registration.registration_id),
-        )
+        conn = self.connect()
+        allowed = ("待审核", "已通过") if registration.status == "已取消" else ("待审核",)
+        try:
+            placeholders = ",".join("?" for _ in allowed)
+            cursor = conn.execute(
+                "UPDATE registrations SET status=?, updated_at=? WHERE registration_id=?"
+                f" AND status IN ({placeholders})",
+                (registration.status, registration.updated_at, registration.registration_id, *allowed),
+            )
+            if cursor.rowcount != 1:
+                raise BusinessError("报名状态已改变，请刷新后重试")
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            if str(exc) == "campusevent:quota":
+                raise BusinessError("名额已满") from exc
+            raise
+        finally:
+            conn.close()
         return registration
 
     def get(self, registration_id: str) -> Registration | None:
@@ -264,11 +297,47 @@ class NotificationLogRepository(BaseRepository):
         self.execute(
             "INSERT INTO notification_log (log_id, event_type, student_id, activity_id,"
             " registration_id, reason, created_at) VALUES (?,?,?,?,?,?,?)",
-            (f"log-{student_id}-{registration_id}-{event_type}-{created_at}", event_type,
+            (new_id("log"), event_type,
              student_id, activity_id, registration_id, reason, created_at),
         )
 
     def list_all(self) -> list[dict[str, Any]]:
         return [dict(r) for r in self.query(
             "SELECT * FROM notification_log ORDER BY created_at DESC"
+        )]
+
+
+class MockEmailRepository(BaseRepository):
+    """Atomic, persistent simulated delivery and failure logging."""
+
+    def record_once(self, email: MockEmail, failure_reason: str = "") -> bool:
+        conn = self.connect()
+        try:
+            with conn:
+                inserted = conn.execute(
+                    """INSERT INTO mock_emails (
+                        email_id,student_id,registration_id,event_type,recipient,subject,
+                        content,status,created_at,error
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT(registration_id,event_type) DO NOTHING""",
+                    (email.email_id, email.student_id, email.registration_id, email.event_type,
+                     email.recipient, email.subject, email.content, email.status,
+                     email.created_at, email.error),
+                ).rowcount == 1
+                if inserted and failure_reason:
+                    conn.execute(
+                        """INSERT INTO notification_log
+                        (log_id,event_type,student_id,activity_id,registration_id,reason,created_at)
+                        SELECT ?,?,?,activity_id,?,?,? FROM registrations WHERE registration_id=?""",
+                        (new_id("log"), email.event_type, email.student_id, email.registration_id,
+                         failure_reason, email.created_at, email.registration_id),
+                    )
+            return inserted
+        finally:
+            conn.close()
+
+    def list_by_student(self, student_id: str) -> list[MockEmail]:
+        return [MockEmail(**dict(row)) for row in self.query(
+            "SELECT * FROM mock_emails WHERE student_id=? ORDER BY created_at DESC,email_id",
+            (student_id,),
         )]

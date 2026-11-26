@@ -111,7 +111,10 @@ def test_cr2_02_review_result(container, approved, status):
     container.registration_service.review(reg.registration_id, approved)
     emails = container.email_repo.list_by_student("G2")
     assert len(emails) == 1 and emails[0].event_type == status
-    assert status in emails[0].subject and status in emails[0].content
+    assert status in emails[0].subject
+    assert emails[0].content == next(
+        m.content for m in container.message_repo.list_by_student("G2") if m.event_type == status
+    )
     assert len(container.message_repo.list_by_student("G2")) == 2
 
 
@@ -309,3 +312,88 @@ def test_repeat_stale_review_cannot_overwrite_completed_state(container):
     with pytest.raises(BusinessError):
         container.registration_repo.update(stale)
     assert container.registration_repo.get(reg.registration_id).status == STATUS_APPROVED
+
+
+def test_email_record_and_failure_log_are_atomic(container):
+    student(container, 2)
+    a = make_activity(container.activity_service)
+    reg = container.registration_service.submit(a.activity_id, "G2")
+    with sqlite3.connect(container.db_path) as conn:
+        conn.execute("DELETE FROM mock_emails")
+        conn.executescript("""
+            CREATE TRIGGER inject_log_failure BEFORE INSERT ON notification_log
+            BEGIN SELECT RAISE(ABORT,'injected log failure'); END;
+        """)
+    container.email_sender.fail = True
+    container.publisher.publish(event_for(reg))
+    assert container.email_repo.list_by_student("G2") == []
+    assert container.registration_repo.get(reg.registration_id).status == STATUS_APPROVED
+
+
+def test_unknown_activity_returns_404(container):
+    app, _ = build_app(container.db_path)
+    assert app.test_client().get("/activity/missing").status_code == 404
+
+
+def test_pending_can_still_apply_when_review_activity_is_full(container):
+    student(container, 2)
+    student(container, 3)
+    app, c = build_app(container.db_path)
+    a = make_activity(c.activity_service, policy_type="审核型", capacity=1)
+    first = c.registration_service.submit(a.activity_id, "G2")
+    c.registration_service.review(first.registration_id, True)
+    page = app.test_client().get(f"/activity/{a.activity_id}?student=G3").get_data(as_text=True)
+    assert "立即报名" in page
+    assert c.registration_service.submit(a.activity_id, "G3").status == STATUS_PENDING
+
+
+@pytest.mark.parametrize("approved", [True, False])
+def test_email_failure_after_review_keeps_decision(container, approved):
+    student(container, 2)
+    a = make_activity(container.activity_service, policy_type="审核型")
+    reg = container.registration_service.submit(a.activity_id, "G2")
+    container.email_sender.fail = True
+    container.registration_service.review(reg.registration_id, approved)
+    status = STATUS_APPROVED if approved else STATUS_REJECTED
+    assert container.registration_repo.get(reg.registration_id).status == status
+    assert container.email_repo.list_by_student("G2")[0].status == "FAILED"
+    assert len(container.notification_log_repo.list_all()) == 1
+    assert len(container.message_repo.list_by_student("G2")) == 2
+
+
+def test_concurrent_approvals_do_not_exceed_capacity(container, monkeypatch):
+    student(container, 2)
+    student(container, 3)
+    a = make_activity(container.activity_service, policy_type="审核型", capacity=1)
+    registrations = [
+        container.registration_service.submit(a.activity_id, sid) for sid in ("G2", "G3")
+    ]
+    barrier = Barrier(2)
+    original = container.registration_service._check_quota
+
+    def checked(activity):
+        original(activity)
+        barrier.wait(timeout=10)
+
+    monkeypatch.setattr(container.registration_service, "_check_quota", checked)
+
+    def approve(reg):
+        try:
+            return container.registration_service.review(reg.registration_id, True).status
+        except BusinessError:
+            return "rejected"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(approve, registrations))
+    assert results.count(STATUS_APPROVED) == 1
+    assert container.registration_repo.count_approved(a.activity_id) == 1
+    assert len(container.registration_repo.list_pending()) == 1
+
+
+def test_database_policy_guard_blocks_stale_activity_update(container):
+    student(container, 2)
+    a = make_activity(container.activity_service, policy_type="审核型")
+    container.registration_service.submit(a.activity_id, "G2")
+    a.policy_type = "直接报名"
+    with pytest.raises(BusinessError, match="待审核"):
+        container.activity_repo.update(a)

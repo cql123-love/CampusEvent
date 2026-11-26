@@ -2,6 +2,15 @@
 {% block title %}我的消息{% endblock %}
 {% block heading %}我的消息{% endblock %}
 {% block sub %}报名与审核结果会实时通知到这里{% endblock %}
+{% block topbar_extra %}
+<form method="get">
+  <select name="student" aria-label="学生" onchange="this.form.submit()">
+    {% for s in students %}
+      <option value="{{ s.student_id }}" {% if s.student_id == student_id %}selected{% endif %}>{{ s.name }}（{{ s.grade }}年级）</option>
+    {% endfor %}
+  </select>
+</form>
+{% endblock %}
 
 {% block content %}
 <div class="panel" style="max-width:760px;">
@@ -34,4 +43,27 @@
     </div>
   {% endif %}
 </div>
+
+<section style="margin-top:24px;">
+  <h3>模拟邮件</h3>
+  {% if emails %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>收件人</th><th>主题与内容</th><th>状态</th><th>时间</th></tr></thead>
+      <tbody>
+      {% for e in emails %}
+      <tr>
+        <td>{{ e.recipient }}</td>
+        <td><strong>{{ e.subject }}</strong><br>{{ e.content }}{% if e.error %}<br>{{ e.error }}{% endif %}</td>
+        <td><span class="tag {{ 'tag-approved' if e.status == 'SENT' else 'tag-rejected' }}">{{ e.status }}</span></td>
+        <td>{{ e.created_at }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p>暂无模拟邮件。</p>
+  {% endif %}
+</section>
 {% endblock %}

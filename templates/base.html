@@ -6,7 +6,7 @@
   <title>{% block title %}CampusEvent{% endblock %} · 校园活动报名与管理系统</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body data-release="change-v2">
   <aside class="rail">
     <div class="rail-brand">
       <span class="mark">CE</span>
@@ -14,10 +14,10 @@
       <p>校园活动报名与管理</p>
     </div>
     <nav>
-      <a href="{{ url_for('main.index') }}" class="{{ 'active' if request.endpoint == 'main.index' }}">
+      <a href="{{ url_for('main.index', student=student_id|default('S001')) }}" class="{{ 'active' if request.endpoint == 'main.index' }}">
         <span class="ic">▤</span>活动广场
       </a>
-      <a href="{{ url_for('main.messages') }}" class="{{ 'active' if request.endpoint == 'main.messages' }}">
+      <a href="{{ url_for('main.messages', student=student_id|default('S001')) }}" class="{{ 'active' if request.endpoint == 'main.messages' }}">
         <span class="ic">✉</span>我的消息
       </a>
       <a href="{{ url_for('main.admin_home') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('main.admin') }}">

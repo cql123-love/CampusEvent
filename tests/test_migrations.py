@@ -1,5 +1,7 @@
 """Upgrade real baseline structures without reseeding or deleting history."""
 import sqlite3
+import importlib.util
+from pathlib import Path
 
 import pytest
 
@@ -68,7 +70,6 @@ def test_upgrade_preserves_history_and_is_repeatable(tmp_path):
     with sqlite3.connect(path) as conn:
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
-    c.activity_service.delete_activity(a.activity_id) if False else None
 
 
 def test_migration_failure_rolls_back_all_schema_changes(tmp_path, monkeypatch):
@@ -110,3 +111,33 @@ def test_newer_database_version_is_not_downgraded(tmp_path):
         AppContainer(path)
     with sqlite3.connect(path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 99
+
+
+def test_upgrade_tool_creates_restorable_backup(tmp_path):
+    module_path = Path(__file__).resolve().parents[1] / "tools" / "upgrade_database.py"
+    spec = importlib.util.spec_from_file_location("upgrade_database", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = tmp_path / "legacy.db"
+    create_baseline(path)
+    before = snapshot(path)
+    backup = module.upgrade(path)
+    assert backup.is_file() and snapshot(backup) == before
+    with sqlite3.connect(backup) as conn:
+        assert "grade" not in [r[1] for r in conn.execute("PRAGMA table_info(students)")]
+
+
+def test_duplicate_legacy_effective_registrations_abort_migration(tmp_path):
+    path = str(tmp_path / "duplicates.db")
+    create_baseline(path)
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE registrations SET status='待审核'")
+        conn.execute(
+            "INSERT INTO registrations VALUES('duplicate','legacy','S002','待审核','now','now')"
+        )
+    before = snapshot(path)
+    with pytest.raises(sqlite3.IntegrityError):
+        AppContainer(path)
+    assert snapshot(path) == before
+    with sqlite3.connect(path) as conn:
+        assert "grade" not in [r[1] for r in conn.execute("PRAGMA table_info(students)")]

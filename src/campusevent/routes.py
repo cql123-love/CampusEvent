@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
 from .entities import ALL_POLICY_TYPES, ALL_STATUSES, STATUS_PENDING
+from flask import abort
 from .services import BusinessError
 
 bp = Blueprint("main", __name__)
@@ -30,7 +31,10 @@ def index():
     student_id = _current_student_id()
     activities = c.activity_service.list_activities(keyword)
 
-    my_regs = {r.activity_id: r for r in c.registration_repo.list_by_student(student_id)}
+    my_regs = {}
+    for reg in c.registration_repo.list_by_student(student_id):
+        if reg.activity_id not in my_regs or reg.is_effective():
+            my_regs[reg.activity_id] = reg
     items = []
     for activity in activities:
         stats = c.activity_service.statistics(activity.activity_id)
@@ -55,6 +59,8 @@ def activity_detail(activity_id):
     """活动详情（UC-02 扩展 / UC-07）。"""
     c = _container()
     student_id = _current_student_id()
+    if c.activity_repo.get(activity_id) is None:
+        abort(404)
     stats = c.activity_service.statistics(activity_id)
     my_regs = [r for r in c.registration_repo.list_by_student(student_id)
                if r.activity_id == activity_id]
@@ -63,6 +69,7 @@ def activity_detail(activity_id):
         stats=stats,
         student_id=student_id,
         my_registrations=my_regs,
+        effective_registrations=[r for r in my_regs if r.is_effective()],
         registrations=c.registration_repo.list_by_activity(activity_id),
         students=c.student_repo.list(),
     )
@@ -103,6 +110,7 @@ def messages():
     return render_template(
         "messages.html",
         messages=c.registration_service.list_messages(student_id),
+        emails=c.email_repo.list_by_student(student_id),
         student_id=student_id,
         students=c.student_repo.list(),
     )

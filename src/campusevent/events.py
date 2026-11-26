@@ -10,12 +10,15 @@
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from .entities import new_id
+from .entities import MockEmail, STATUS_APPROVED, STATUS_REJECTED, new_id
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -62,7 +65,7 @@ class EventPublisher:
             try:
                 observer.update(event)
             except Exception:  # noqa: BLE001 —— 观察者失败必须被隔离
-                continue
+                logger.exception("Observer failed for registration %s", event.registration_id)
 
 
 class MessageNotifier:
@@ -79,9 +82,10 @@ class MessageNotifier:
     def update(self, event: RegistrationEvent) -> None:
         try:
             self._write_message(event)
-        except sqlite3.IntegrityError:
-            # 幂等：同一报名 + 同一事件类型只通知一次
-            return
+        except sqlite3.IntegrityError as exc:
+            if ("messages.related_registration_id, messages.event_type" in str(exc)):
+                return
+            self._log_failure(event, str(exc))
         except Exception as exc:  # noqa: BLE001
             self._log_failure(event, str(exc))
 
@@ -113,4 +117,53 @@ class MessageNotifier:
                 created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
         except Exception:  # noqa: BLE001 —— 留痕失败也不能影响主流程
-            pass
+            logger.exception("Notification log unavailable for %s", event.registration_id)
+
+
+class MockEmailSender:
+    """Simulate delivery; the only observable send is a unique database record."""
+
+    def __init__(self, email_repo, fail: bool = False) -> None:
+        self._email_repo = email_repo
+        self.fail = fail
+
+    def send_once(self, event: RegistrationEvent, recipient: str,
+                  subject: str, content: str) -> None:
+        reason = "模拟邮件发送失败（故障注入）" if self.fail else ""
+        email = MockEmail(
+            email_id=new_id("email"), student_id=event.student_id,
+            registration_id=event.registration_id, event_type=event.event_type,
+            recipient=recipient, subject=subject, content=content,
+            status="FAILED" if reason else "SENT", error=reason,
+        )
+        inserted = self._email_repo.record_once(email, reason)
+        if inserted and reason:
+            logger.error("%s: %s", event.registration_id, reason)
+
+
+class EmailNotifier:
+    """An additional observer; never changes the registration result."""
+
+    def __init__(self, sender: MockEmailSender, log_repo=None) -> None:
+        self._sender = sender
+        self._log_repo = log_repo
+
+    def update(self, event: RegistrationEvent) -> None:
+        if event.event_type not in (STATUS_APPROVED, STATUS_REJECTED):
+            return
+        try:
+            self._sender.send_once(
+                event, f"{event.student_id}@campusevent.invalid",
+                f"CampusEvent 报名结果：{event.event_type}", event.content,
+            )
+        except Exception as exc:
+            logger.exception("模拟邮件记录失败: %s", event.registration_id)
+            if self._log_repo is not None:
+                try:
+                    self._log_repo.insert(
+                        event.event_type, event.student_id, event.activity_id,
+                        event.registration_id, f"模拟邮件记录失败：{exc}",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                except Exception:
+                    logger.exception("Email failure log unavailable: %s", event.registration_id)

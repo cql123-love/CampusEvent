@@ -17,13 +17,15 @@
       <dd>
         {% if stats.activity.policy_type == '直接报名' %}
           <span class="tag tag-direct">直接报名</span>　名额充足即自动通过
+        {% elif stats.activity.policy_type == '年级限定直接报名' %}
+          <span class="tag tag-direct">年级限定直接报名</span>　仅限大二、大三
         {% else %}
           <span class="tag tag-review">审核型</span>　提交后需管理员审核
         {% endif %}
       </dd>
     </dl>
 
-    {% set mine = my_registrations|selectattr('is_effective')|list %}
+    {% set mine = effective_registrations %}
     <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">
       {% if mine %}
         <p style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;">
@@ -39,7 +41,7 @@
       {% else %}
         {% if stats.activity.is_started() %}
           <p class="note">该活动已开始，报名通道已关闭。</p>
-        {% elif stats.remaining <= 0 %}
+        {% elif stats.remaining <= 0 and stats.activity.policy_type != '审核型' %}
           <p class="note">名额已满，暂时无法报名。</p>
         {% else %}
           <form method="post" action="{{ url_for('main.register', activity_id=stats.activity.activity_id) }}">
